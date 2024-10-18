@@ -81,7 +81,7 @@ dup2_re = re.compile(r"dup2\((?P<old_fd>\d+)<(?P<old_fd_resolved>[\d\w/\-+_\.:\[
 
 
 class TraceProcess:
-    '''Helper class to store information about processes'''
+    '''Helper class to store information about a single process'''
     def __init__(self, parent_pid, pid):
         self._parent_pid = parent_pid
         self._parent_pid_label = parent_pid
@@ -125,7 +125,7 @@ class TraceProcess:
 
 
 class OpenedFile:
-    '''Helper class to store information about opened files'''
+    '''Helper class to store information about a single opened file'''
     def __init__(self, cwd, flags, original_path, resolved_path, fd, timestamp):
         self._cwd = cwd
         self._flags = flags
