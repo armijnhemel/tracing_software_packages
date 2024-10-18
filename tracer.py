@@ -19,6 +19,7 @@ import pathlib
 import pickle
 import random
 import re
+import shutil
 import string
 import sys
 
@@ -295,6 +296,98 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
     if debug:
         print("END RECONSTRUCTION", datetime.datetime.now(datetime.UTC).isoformat(), file=sys.stderr)
 
+def get_open_files(infile):
+    # load the data
+    meta, data = pickle.load(infile)
+
+    inputs = set()
+    outputs = set()
+
+    opened_files = set()
+    for pid in data:
+        for opened_file in data[pid].opened_files:
+            if opened_file.is_directory:
+                # directories can be safely skipped
+                continue
+            if opened_file.is_read:
+                inputs.add(opened_file.resolved_path)
+            if opened_file.is_written:
+                outputs.add(opened_file.resolved_path)
+
+    source_files = []
+    system_files = []
+    for input_file in sorted(inputs.difference(outputs)):
+        if input_file.is_relative_to('/proc'):
+            continue
+        if input_file.is_relative_to('/dev'):
+            continue
+        if input_file == meta['basepath']:
+            continue
+        if input_file.is_relative_to(meta['basepath']):
+            source_files.append(input_file)
+        else:
+            system_files.append(input_file)
+
+    return (meta, source_files, system_files)
+
+@app.command(short_help='Print all opened files')
+@click.option('--pickle', '-p', 'infile', required=True,
+              help='name of pickle file', type=click.File('rb'))
+@click.option('--debug', '-d', is_flag=True, help='print debug information')
+def print_open_files(infile, debug):
+    meta, source_files, system_files = get_open_files(infile)
+
+    if system_files:
+        print("System files:")
+        for input_file in system_files:
+            print(f"- {input_file}")
+        print()
+    if source_files:
+        print("Source files:")
+        for input_file in source_files:
+            print_path = input_file.relative_to(meta['basepath'])
+            print(f"- {print_path}")
+
+
+@app.command(short_help='Copy source code files')
+@click.option('--pickle', '-p', 'infile', required=True,
+              help='name of pickle file', type=click.File('rb'))
+@click.option('--source-directory', '-i', 'source_directory', required=True,
+              help='source directory', type=click.Path(path_type=pathlib.Path))
+@click.option('--output-directory', '-o', 'output_directory', required=True,
+              help='output directory', type=click.Path(path_type=pathlib.Path))
+@click.option('--debug', '-d', is_flag=True, help='print debug information')
+def copy_files(infile, source_directory, output_directory, debug):
+    # a directory with all the tracefiles
+    if not source_directory.is_dir():
+        raise click.ClickException(f"{source_directory} does not exist or is not a directory")
+
+    if not output_directory.is_dir():
+        raise click.ClickException(f"{output_directory} does not exist or is not a directory")
+
+    meta, source_files, system_files = get_open_files(infile)
+
+    if source_files:
+        for input_file in source_files:
+            source_file = input_file.relative_to(meta['basepath'])
+            copy_path = source_directory / source_file
+            if not copy_path.exists():
+                print(f"Expected path {copy_path} does not exist, exiting...", file=sys.stderr)
+                sys.exit()
+
+            destination = output_directory / source_file
+
+            # first make sure the subdirectory exists
+            if source_file.parent != '.':
+                destination.parent.mkdir(parents=True, exist_ok=True)
+
+            # then copy the file
+            # TODO: symlinks
+            if debug:
+                print(f"copying {source_file}", file=sys.stderr)
+            shutil.copy(copy_path, destination)
+
+
 @app.command(short_help='Process pickle file output')
 @click.option('--pickle', '-p', 'infile', required=True,
               help='name of pickle file', type=click.File('rb'))
@@ -304,6 +397,8 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
 def traverse(infile, debug, searchpath):
     # load the data
     meta, data = pickle.load(infile)
+
+    resolved_searchpath = meta['basepath'] / searchpath
 
     # The most interesting data is opened files.
     # These files can be divided into a few categories:
@@ -340,22 +435,42 @@ def traverse(infile, debug, searchpath):
                 inputs_per_pid[pid].append(opened_file)
                 if opened_file.resolved_path not in pids_per_input:
                      pids_per_input[opened_file.resolved_path] = []
-                pids_per_input[opened_file.resolved_path].append(pid)
+                pids_per_input[opened_file.resolved_path].append((pid, opened_file.timestamp))
             if opened_file.is_written:
                 if pid not in outputs_per_pid:
                     outputs_per_pid[pid] = []
                 outputs_per_pid[pid].append(opened_file)
                 if opened_file.resolved_path not in pids_per_output:
                      pids_per_output[opened_file.resolved_path] = []
-                pids_per_output[opened_file.resolved_path].append(pid)
+                pids_per_output[opened_file.resolved_path].append((pid, opened_file.timestamp))
 
-    for b in pids_per_input.items():
-        break
-        print('in', b)
-    for b in pids_per_output.items():
-        break
-        print('out', b)
-        
+    if resolved_searchpath not in pids_per_output:
+        print(f"Path {searchpath} could not be found as an output, exiting...", file=sys.stderr)
+        sys.exit(1)
+
+    # in case there are multiple
+    latest = float(0)
+    latest_pid = None
+    for pid, timestamp in pids_per_output[resolved_searchpath]:
+        if timestamp > latest:
+            latest = timestamp
+            latest_pid = pid
+
+    inputs_per_output = set()
+
+    # recursively walk inputs/outputs
+    pid_deque = collections.deque()
+    pid_deque.append(latest_pid)
+
+    while True:
+        try:
+            pid = pid_deque.popleft()
+            for i in inputs_per_pid[pid]:
+                print(i.resolved_path)
+            #print(pid, inputs_per_pid[pid])
+        except IndexError:
+            break
+
 
     '''
     graph = pydot.Dot("pid_graph", graph_type="graph")
@@ -415,7 +530,7 @@ def process_tracefile(tracefile, parent, debug):
                 continue
 
             if debug:
-                print(pid, syscall)
+                print(pid, syscall, file=sys.stderr)
 
             if syscall in ['chdir', 'fchdir']:
                 if syscall == 'chdir':
@@ -517,6 +632,9 @@ def process_tracefile(tracefile, parent, debug):
                         opened.append(opened_file)
                         open_fds[fd] = opened_file
             elif syscall in ['rename']:
+                # renaming is important to track.
+                # Example: in the Linux kernel the file include/config/auto.conf
+                # is "created" by renaming an already existing file.
                 rename_res = rename_re.search(line)
                 #print('RENAME', rename_res)
 
