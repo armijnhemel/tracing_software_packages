@@ -44,7 +44,7 @@ syscall_re = re.compile(r'\d+\.\d+\s+(?P<syscall>[\d\w_]+)\(')
 
 # some precompiled regular expressions for interesting system calls
 # valid filename characters:
-# <>\w/\-+,.*$:;
+# <>\w\d/\-+,.*$:;
 chdir_re = re.compile(r"chdir\(\"(?P<path>[\w/\-_+,.]+)\"\s*\)\s+=\s+(?P<returncode>-?\d+)")
 fchdir_re = re.compile(r"fchdir\((?P<fd>\d+)<(?P<path>.*)>\s*\)\s+=\s+(?P<returncode>-?\d+)")
 
@@ -58,8 +58,9 @@ close_re = re.compile(r"close\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>\)\s+=\
 # getcwd
 getcwd_re = re.compile(r"getcwd\(\"(?P<cwd>[\w/\-+,.]+)\",\s+\d+\)\s+=\s+(?P<fd>\-?\d+)")
 
-# rename
+# rename and renameat2
 rename_re = re.compile(r"rename\(\"(?P<original>[\w/\-+,.]+)\",\s+\"(?P<renamed>[\w/\-+,.]+)\"\)\s+=\s+(?P<returncode>\-?\d+)")
+renameat2_re = re.compile(r"renameat2\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<original>[\w\d\s\./\-+]+)\",\s+(?P<open_fd2>\w+)<(?P<cwd2>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<renamed>[\w\d\s\./\-+]+)\",\s(?P<flags>\w+)\)\s+=\s+(?P<returncode>\-?\d+)")
 
 # clone
 clone_re = re.compile(r"clone\([\w/\-+,.=]+,\s+(?P<flags>[\w|=]+),\s+[\w=]+?\)\s+=\s+(?P<clone_pid>\-?\d+)<(?P<command>.*)>")
@@ -650,11 +651,14 @@ def process_tracefile(tracefile, parent, debug):
                         opened_file = OpenedFile(pathlib.Path(openres.group('cwd')), flags, orig_path, resolved_path, fd, timestamp)
                         opened.append(opened_file)
                         open_fds[fd] = opened_file
-            elif syscall in ['rename']:
+            elif syscall in ['rename', 'renameat2']:
                 # renaming is important to track.
                 # Example: in the Linux kernel the file include/config/auto.conf
                 # is "created" by renaming an already existing file.
-                rename_res = rename_re.search(line)
+                if syscall == 'rename':
+                    rename_res = rename_re.search(line)
+                else:
+                    rename_res = None
                 if rename_res:
                     if rename_res.group('returncode') != '-1':
                         timestamp = float(line.split(' ', maxsplit=1)[0])
