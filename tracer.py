@@ -658,11 +658,17 @@ def process_tracefile(tracefile, parent, debug):
                 if syscall == 'rename':
                     rename_res = rename_re.search(line)
                 else:
-                    rename_res = None
+                    rename_res = renameat2_re.search(line)
                 if rename_res:
                     if rename_res.group('returncode') != '-1':
                         timestamp = float(line.split(' ', maxsplit=1)[0])
-                        renamed_file = RenamedFile(timestamp, pathlib.Path(rename_res.group('original')), pathlib.Path(rename_res.group('renamed')))
+                        if syscall == 'rename':
+                            original_name = pathlib.Path(rename_res.group('original'))
+                            renamed_name = pathlib.Path(rename_res.group('renamed'))
+                        elif syscall == 'renameat2':
+                            original_name = pathlib.Path(rename_res.group('cwd')) / rename_res.group('original')
+                            renamed_name = pathlib.Path(rename_res.group('cwd2'))/ rename_res.group('renamed')
+                        renamed_file = RenamedFile(timestamp, original_name, renamed_name)
                         renamed.append(renamed_file)
 
     # store the results for the trace process
