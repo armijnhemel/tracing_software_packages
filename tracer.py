@@ -59,7 +59,7 @@ close_re = re.compile(r"close\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>\)\s+=\
 getcwd_re = re.compile(r"getcwd\(\"(?P<cwd>[\w/\-+,.]+)\",\s+\d+\)\s+=\s+(?P<fd>\-?\d+)")
 
 # rename
-rename_re = re.compile(r"rename\(\"([\w/\-+,.]+)\",\s+\"([\w/\-+,.]+)\"\)\s+=\s+(\-?\d+)")
+rename_re = re.compile(r"rename\(\"(?P<original>[\w/\-+,.]+)\",\s+\"(?P<renamed>[\w/\-+,.]+)\"\)\s+=\s+(?P<returncode>\-?\d+)")
 
 # clone
 clone_re = re.compile(r"clone\([\w/\-+,.=]+,\s+(?P<flags>[\w|=]+),\s+[\w=]+?\)\s+=\s+(?P<clone_pid>\-?\d+)<(?P<command>.*)>")
@@ -89,6 +89,7 @@ class TraceProcess:
         self._pid = pid
         self._pid_label = pid
         self._opened_files = []
+        self._renamed_files = []
         self._children = []
         self._command = None
 
@@ -124,6 +125,14 @@ class TraceProcess:
     def opened_files(self, opened_files):
         self._opened_files = opened_files
 
+    @property
+    def renamed_files(self):
+        return self._renamed_files
+
+    @renamed_files.setter
+    def renamed_files(self, renamed_files):
+        self._renamed_files = renamed_files
+
 
 class OpenedFile:
     '''Helper class to store information about a single opened file'''
@@ -133,8 +142,6 @@ class OpenedFile:
         self._original_path = original_path
         self._resolved_path = resolved_path
         self._fd = fd
-        self._renamed = False
-        self._original_name = original_path
         self._timestamp = timestamp
 
     @property
@@ -156,14 +163,6 @@ class OpenedFile:
     @property
     def original_path(self):
         return self._original_path
-
-    @property
-    def renamed(self):
-        return self._renamed
-
-    @renamed.setter
-    def renamed(self, renamed):
-        self._renamed = renamed
 
     @property
     def resolved_path(self):
@@ -202,6 +201,25 @@ class OpenedFile:
         if 'O_WRONLY' in self.flags or 'O_RDWR' in self.flags:
             is_write = True
         return is_write
+
+class RenamedFile:
+    def __init__(self, timestamp, original_name, renamed_name):
+        self._timestamp = timestamp
+        self._original_name = original_name
+        self._renamed_name = renamed_name
+
+    @property
+    def timestamp(self):
+        return self._timestamp
+
+    @property
+    def original_name(self):
+        return self._original_name
+
+    @property
+    def renamed_name(self):
+        return self._renamed_name
+
 
 
 # TODO: remove this code
@@ -500,6 +518,7 @@ def process_tracefile(tracefile, parent, debug):
     command = None
     closed = set()
     opened = []
+    renamed = []
     pid = tracefile.suffix[1:]
 
     # data inherited from the parent process
@@ -636,11 +655,16 @@ def process_tracefile(tracefile, parent, debug):
                 # Example: in the Linux kernel the file include/config/auto.conf
                 # is "created" by renaming an already existing file.
                 rename_res = rename_re.search(line)
-                #print('RENAME', rename_res)
+                if rename_res:
+                    if rename_res.group('returncode') != '-1':
+                        timestamp = float(line.split(' ', maxsplit=1)[0])
+                        renamed_file = RenamedFile(timestamp, pathlib.Path(rename_res.group('original')), pathlib.Path(rename_res.group('renamed')))
+                        renamed.append(renamed_file)
 
     # store the results for the trace process
     trace_process.children = children
     trace_process.opened_files = opened
+    trace_process.renamed_files = renamed
     trace_process.command = command
 
     # store the results in the global RESULTS dict
