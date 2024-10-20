@@ -45,22 +45,22 @@ syscall_re = re.compile(r'\d+\.\d+\s+(?P<syscall>[\d\w_]+)\(')
 # some precompiled regular expressions for interesting system calls
 # valid filename characters:
 # <>\w\d/\-+,.*$:;
-chdir_re = re.compile(r"chdir\(\"(?P<path>[\w/\-_+,.]+)\"\s*\)\s+=\s+(?P<returncode>-?\d+)")
-fchdir_re = re.compile(r"fchdir\((?P<fd>\d+)<(?P<path>.*)>\s*\)\s+=\s+(?P<returncode>-?\d+)")
+chdir_re = re.compile(r"chdir\(\"(?P<path>[\w/\-_+,.]+)\"\s*\)\s+=\s+(?P<returncode>\d+)")
+fchdir_re = re.compile(r"fchdir\((?P<fd>\d+)<(?P<path>.*)>\s*\)\s+=\s+(?P<returncode>\d+)")
 
 # open
 open_re = re.compile(r"open\(\"([<>\w/\-+,.*$:;]+)\", ([\w|]+)(?:,\s+\d+)?\)\s+= (\-?\d+)<(.*)>$")
 openat_re = re.compile(r"openat\((?P<open_fd>\w+)<(?P<cwd>.*)>, \"(?P<path>[<>\w/\-+,.*$:;]+)\", (?P<flags>[\w|]+)(?:,\s+\d+)?\)\s+=\s+(?P<result_fd>\-?\d+)<(?P<resolved_path>.*)>$")
 
 # close
-close_re = re.compile(r"close\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>\)\s+=\s+(?P<returncode>-?\d+)")
+close_re = re.compile(r"close\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>\)\s+=\s+(?P<returncode>\d+)")
 
 # getcwd
 getcwd_re = re.compile(r"getcwd\(\"(?P<cwd>[\w/\-+,.]+)\",\s+\d+\)\s+=\s+(?P<fd>\-?\d+)")
 
 # rename and renameat2
-rename_re = re.compile(r"rename\(\"(?P<original>[\w/\-+,.]+)\",\s+\"(?P<renamed>[\w/\-+,.]+)\"\)\s+=\s+(?P<returncode>\-?\d+)")
-renameat2_re = re.compile(r"renameat2\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<original>[\w\d\s\./\-+]+)\",\s+(?P<open_fd2>\w+)<(?P<cwd2>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<renamed>[\w\d\s\./\-+]+)\",\s(?P<flags>\w+)\)\s+=\s+(?P<returncode>\-?\d+)")
+rename_re = re.compile(r"rename\(\"(?P<original>[\w/\-+,.]+)\",\s+\"(?P<renamed>[\w/\-+,.]+)\"\)\s+=\s+(?P<returncode>\d+)")
+renameat2_re = re.compile(r"renameat2\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<original>[\w\d\s\./\-+]+)\",\s+(?P<open_fd2>\w+)<(?P<cwd2>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<renamed>[\w\d\s\./\-+]+)\",\s(?P<flags>\w+)\)\s+=\s+(?P<returncode>\d+)")
 
 # clone
 clone_re = re.compile(r"clone\([\w/\-+,.=]+,\s+(?P<flags>[\w|=]+),\s+[\w=]+?\)\s+=\s+(?P<clone_pid>\-?\d+)<(?P<command>.*)>")
@@ -70,7 +70,7 @@ clone3_re = re.compile(r"clone3\({flags=(?P<flags>[\w_|]+),\s+[\w{}=|,\s<>\[\]]+
 vfork_re = re.compile(r"vfork\(\s*\)\s*=\s*(?P<clone_pid>\d+)<(?P<command>.*)>")
 
 # execve
-execve_re = re.compile(r"execve\(\"(?P<command>.*)\",\s*\[(?P<args>.*)\],\s+0x\w+\s+/\*\s+\d+\s+vars\s+\*/\)\s*=\s*(?P<returncode>\-?\d+)")
+execve_re = re.compile(r"execve\(\"(?P<command>.*)\",\s*\[(?P<args>.*)\],\s+0x\w+\s+/\*\s+\d+\s+vars\s+\*/\)\s*=\s*(?P<returncode>\d+)")
 
 # symlink
 # symlink_re =
@@ -553,14 +553,15 @@ def process_tracefile(tracefile, parent, debug):
                 print(pid, syscall, file=sys.stderr)
 
             if syscall in ['chdir', 'fchdir']:
+                if not line.rsplit('=', maxsplit=1)[1].strip().startswith('0'):
+                    continue
                 if syscall == 'chdir':
                     chdir_res = chdir_re.search(line)
                 elif syscall == 'fchdir':
                     chdir_res = fchdir_re.search(line)
                 if chdir_res:
                     chdir_path = pathlib.Path(chdir_res.group('path'))
-                    chdir_return = chdir_res.group('returncode')
-                    if chdir_return != '0' or chdir_path == '.':
+                    if chdir_path == '.':
                         continue
 
                     # absolute paths can be stored immediately
@@ -599,6 +600,8 @@ def process_tracefile(tracefile, parent, debug):
                 process_tracefile(child_tracefile, {'pid': pid, 'opened': children_opened, 'cwd': cwd}, debug)
 
             elif syscall == 'close':
+                if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                    continue
                 close_res = close_re.search(line)
                 if not close_res:
                     continue
@@ -623,15 +626,18 @@ def process_tracefile(tracefile, parent, debug):
                     open_fds[new_fd] = new_file
             elif syscall == 'execve':
                 # store the programs that are (successfully) executed
+                if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                    continue
                 execveres = execve_re.search(line)
                 if execveres:
-                    if execveres.group('returncode') != '-1':
-                        command = {'command': execveres.group('command'), 'args': execveres.group('args')}
+                    command = {'command': execveres.group('command'), 'args': execveres.group('args')}
             elif syscall == 'getcwd':
                 getcwd_result = getcwd_re.search(line)
                 if getcwd_result:
                     cwd = pathlib.Path(os.path.normpath(getcwd_result.group('cwd')))
             elif syscall in ['openat']:
+                if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                    continue
                 openres = openat_re.search(line)
                 if openres:
                     # store both the (resolved) original path
@@ -655,21 +661,22 @@ def process_tracefile(tracefile, parent, debug):
                 # renaming is important to track.
                 # Example: in the Linux kernel the file include/config/auto.conf
                 # is "created" by renaming an already existing file.
+                if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                    continue
                 if syscall == 'rename':
                     rename_res = rename_re.search(line)
                 else:
                     rename_res = renameat2_re.search(line)
                 if rename_res:
-                    if rename_res.group('returncode') != '-1':
-                        timestamp = float(line.split(' ', maxsplit=1)[0])
-                        if syscall == 'rename':
-                            original_name = pathlib.Path(rename_res.group('original'))
-                            renamed_name = pathlib.Path(rename_res.group('renamed'))
-                        elif syscall == 'renameat2':
-                            original_name = pathlib.Path(rename_res.group('cwd')) / rename_res.group('original')
-                            renamed_name = pathlib.Path(rename_res.group('cwd2'))/ rename_res.group('renamed')
-                        renamed_file = RenamedFile(timestamp, original_name, renamed_name)
-                        renamed.append(renamed_file)
+                    timestamp = float(line.split(' ', maxsplit=1)[0])
+                    if syscall == 'rename':
+                        original_name = pathlib.Path(rename_res.group('original'))
+                        renamed_name = pathlib.Path(rename_res.group('renamed'))
+                    elif syscall == 'renameat2':
+                        original_name = pathlib.Path(rename_res.group('cwd')) / rename_res.group('original')
+                        renamed_name = pathlib.Path(rename_res.group('cwd2'))/ rename_res.group('renamed')
+                    renamed_file = RenamedFile(timestamp, original_name, renamed_name)
+                    renamed.append(renamed_file)
 
     # store the results for the trace process
     trace_process.children = children
