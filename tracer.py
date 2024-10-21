@@ -74,7 +74,7 @@ execve_re = re.compile(r"execve\(\"(?P<command>.*)\",\s*\[(?P<args>.*)\],\s+0x\w
 
 # symlink
 # symlink_re =
-symlinkat_re = re.compile(r"symlinkat\(\"(?P<source>[\w\d\s/\.+\-_,]+)\",\s+(?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<target>[\w\d\s/\.+\-_,]+)\"\)\s+=\s+(?P<returncode>\d+)")
+symlinkat_re = re.compile(r"symlinkat\(\"(?P<target>[\w\d\s/\.+\-_,]+)\",\s+(?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<linkpath>[\w\d\s/\.+\-_,]+)\"\)\s+=\s+(?P<returncode>\d+)")
 
 # dup
 #dup
@@ -677,6 +677,16 @@ def process_tracefile(tracefile, parent, debug):
                         renamed_name = pathlib.Path(rename_res.group('cwd2'))/ rename_res.group('renamed')
                     renamed_file = RenamedFile(timestamp, original_name, renamed_name)
                     renamed.append(renamed_file)
+            elif syscall in ['symlinkat']:
+                if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                    continue
+                if syscall == 'symlinkat':
+                    symlink_res = symlinkat_re.search(line)
+                if symlink_res:
+                    timestamp = float(line.split(' ', maxsplit=1)[0])
+                    if syscall == 'symlinkat':
+                        target = pathlib.Path(symlink_res.group('target'))
+                        linkpath = pathlib.Path(symlink_res.group('linkpath'))
 
     # store the results for the trace process
     trace_process.children = children
