@@ -57,6 +57,16 @@ TODO: what to do with writes to files? There are sometimes zero sized files
 that are merely touched, but no content is written to them. Should write
 calls such as `write()` also be tracked?
 
+## Funding
+
+This project is funded through [NGI Zero Core](https://nlnet.nl/core), a fund
+established by [NLnet](https://nlnet.nl) with financial support from the
+European Commission's [Next Generation Internet](https://ngi.eu) program.
+Learn more at the [NLnet project page](https://nlnet.nl/project/BuildTracing).
+
+[<img src="https://nlnet.nl/logo/banner.png" alt="NLnet foundation logo" width="20%" />](https://nlnet.nl)
+[<img src="https://nlnet.nl/image/logos/NGI0_tag.svg" alt="NGI Zero Logo" width="20%" />](https://nlnet.nl/core)
+
 
 [TUD-SERG]:<https://web.archive.org/web/20130429174246/http://www.st.ewi.tudelft.nl/~sander/pdf/publications/TUD-SERG-2012-010.pdf>
 [ASE-2014]:<https://rebels.cs.uwaterloo.ca/confpaper/2014/09/14/tracing-software-build-processes-to-uncover-license-compliance-inconsistencies.html>
