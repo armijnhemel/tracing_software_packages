@@ -74,7 +74,7 @@ execve_re = re.compile(r"execve\(\"(?P<command>.*)\",\s*\[(?P<args>.*)\],\s+0x\w
 
 # symlink
 # symlink_re =
-# symlinkat_re =
+symlinkat_re = re.compile(r"symlinkat\(\"(?P<source>[\w\d\s/\.+\-_,]+)\",\s+(?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<target>[\w\d\s/\.+\-_,]+)\"\)\s+=\s+(?P<returncode>\d+)")
 
 # dup
 #dup
