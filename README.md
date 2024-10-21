@@ -23,6 +23,16 @@ There are two separate steps:
 Let's take the Linux kernel as an example. First trace a Linux kernel build
 with (for example) the following command, but make sure there is enough disk
 space available, as trace files for the Linux kernel tend to get really big.
+The assumption below is that PIDs do not wrap and are not reused. On older
+Linux systems this is an issue, but on newer Linux systems this should not
+be a problem. You can verify this by checking the maximum amount of PIDs used
+on your system:
+
+```console
+$ cat /proc/sys/kernel/pid_max
+4194304
+```
+
 The following command will write tracefiles for a subset of system calls, with
 one trace file per process:
 
