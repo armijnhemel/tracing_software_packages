@@ -390,6 +390,8 @@ def copy_files(infile, source_directory, output_directory, debug):
     meta, source_files, system_files, renamed_files = get_open_files(infile)
 
     if source_files:
+        # first gather all the file paths to be copied
+        copy_files = []
         for input_file in source_files:
             source_file = input_file.relative_to(meta['basepath'])
             copy_path = source_directory / source_file
@@ -399,6 +401,10 @@ def copy_files(infile, source_directory, output_directory, debug):
 
             destination = output_directory / source_file
 
+            copy_files.append((copy_path, destination))
+
+        # then copy all the files.
+        for source_file, destination in  copy_files:
             # first make sure the subdirectory exists
             if source_file.parent != '.':
                 destination.parent.mkdir(parents=True, exist_ok=True)
