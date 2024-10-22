@@ -29,11 +29,6 @@ import pydot
 # these directories can be safely ignored as inputs or outputs
 IGNORE_DIRECTORIES = ['/dev/', '/proc/', '/sys/']
 
-# there are only a few syscalls that are interesting
-INTERESTING_SYSCALLS = ['execve', 'open', 'openat', 'chdir', 'fchdir',
-                        'rename', 'renameat2', 'clone', 'clone3',
-                        'symlink', 'symlinkat']
-
 # a global variable for storing results. This is kind of ugly, but since
 # this program is running in a single thread it doesn't really matter.
 RESULTS = {}
