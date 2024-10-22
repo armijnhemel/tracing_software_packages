@@ -404,7 +404,7 @@ def copy_files(infile, source_directory, output_directory, debug):
             copy_files.append((copy_path, destination))
 
         # then copy all the files.
-        for source_file, destination in  copy_files:
+        for source_file, destination in copy_files:
             # first make sure the subdirectory exists
             if source_file.parent != '.':
                 destination.parent.mkdir(parents=True, exist_ok=True)
@@ -462,14 +462,14 @@ def traverse(infile, debug, searchpath):
                     inputs_per_pid[pid] = []
                 inputs_per_pid[pid].append(opened_file)
                 if opened_file.resolved_path not in pids_per_input:
-                     pids_per_input[opened_file.resolved_path] = []
+                    pids_per_input[opened_file.resolved_path] = []
                 pids_per_input[opened_file.resolved_path].append((pid, opened_file.timestamp))
             if opened_file.is_written:
                 if pid not in outputs_per_pid:
                     outputs_per_pid[pid] = []
                 outputs_per_pid[pid].append(opened_file)
                 if opened_file.resolved_path not in pids_per_output:
-                     pids_per_output[opened_file.resolved_path] = []
+                    pids_per_output[opened_file.resolved_path] = []
                 pids_per_output[opened_file.resolved_path].append((pid, opened_file.timestamp))
 
     if resolved_searchpath not in pids_per_output:
