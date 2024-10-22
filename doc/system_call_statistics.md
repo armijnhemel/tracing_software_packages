@@ -30,6 +30,91 @@ following system calls are used (with filtering):
   37593 wait4
 ```
 
+When building the Linux 6.11 kernel without filtering the following system
+calls are used:
+
+```console
+  88156 access
+  42154 arch_prctl
+ 237764 brk
+   1779 chdir
+     32 chmod
+      2 clock_gettime
+      4 clone3
+2395030 close
+     10 copy_file_range
+    169 dup
+  14325 dup2
+      1 dup3
+  32257 execve
+      4 exit
+  24791 exit_group
+     70 faccessat2
+    778 fadvise64
+     17 fchdir
+      1 fchmod
+      5 fchmodat
+ 126192 fcntl
+      5 fsetxattr
+   1744 ftruncate
+  10858 futex
+  35277 getcwd
+   5528 getdents64
+  25171 getegid
+  25207 geteuid
+  25170 getgid
+      8 getgroups
+   4624 getpgrp
+  29110 getpid
+  13866 getppid
+  21212 getrandom
+   2085 getrusage
+      1 gettid
+  25170 getuid
+  37740 ioctl
+      6 lgetxattr
+      6 listxattr
+ 672136 lseek
+      4 madvise
+   1904 mkdir
+ 565090 mmap
+ 106449 mprotect
+     25 mremap
+  37576 munmap
+2599717 newfstatat
+4104591 openat
+   8962 pipe2
+    203 poll
+     48 prctl
+ 102869 pread64
+  44750 prlimit64
+  89718 pwrite64
+3130646 read
+ 178483 readlink
+      4 rename
+     25 renameat2
+  21081 rseq
+ 280740 rt_sigaction
+ 242538 rt_sigprocmask
+  12799 rt_sigreturn
+      2 sched_getaffinity
+  36124 set_robust_list
+  21077 set_tid_address
+     71 sigaltstack
+   3444 statfs
+     10 statx
+      1 symlinkat
+  11025 sysinfo
+   1318 umask
+   4633 uname
+   2272 unlink
+   2669 unlinkat
+      3 utimensat
+   4125 vfork
+  37593 wait4
+ 526659 write
+```
+
 When building BusyBox 1.37 with the configuration found in
 [`data/busybox-1.37.0.config`](../data/busybox-1.37.0.config) on a recent
 Fedora 39 without filtering any system calls (so this is the full run) the
