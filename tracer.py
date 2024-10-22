@@ -476,7 +476,8 @@ def traverse(infile, debug, searchpath):
         print(f"Path {searchpath} could not be found as an output, exiting...", file=sys.stderr)
         sys.exit(1)
 
-    # in case there are multiple
+    # in case there are multiple processes creating a file
+    # pick the latest one.
     latest = float(0)
     latest_pid = None
     for pid, timestamp in pids_per_output[resolved_searchpath]:
