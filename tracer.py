@@ -204,10 +204,12 @@ class OpenedFile:
         return is_write
 
 class RenamedFile:
-    def __init__(self, timestamp, original_name, renamed_name):
+    def __init__(self, timestamp, original_name, original_cwd, renamed_name, renamed_cwd):
         self._timestamp = timestamp
         self._original_name = original_name
+        self._original_cwd = original_cwd
         self._renamed_name = renamed_name
+        self._renamed_cwd = renamed_cwd
 
     @property
     def timestamp(self):
@@ -218,9 +220,16 @@ class RenamedFile:
         return self._original_name
 
     @property
+    def original_cwd(self):
+        return self._original_cwd
+
+    @property
     def renamed_name(self):
         return self._renamed_name
 
+    @property
+    def renamed_cwd(self):
+        return self._renamed_cwd
 
 
 # TODO: remove this code
@@ -681,11 +690,15 @@ def process_tracefile(tracefile, parent, debug):
                     timestamp = float(line.split(' ', maxsplit=1)[0])
                     if syscall == 'rename':
                         original_name = pathlib.Path(rename_res.group('original'))
+                        original_cwd = cwd
                         renamed_name = pathlib.Path(rename_res.group('renamed'))
+                        renamed_cwd = cwd
                     elif syscall == 'renameat2':
-                        original_name = pathlib.Path(rename_res.group('cwd')) / rename_res.group('original')
-                        renamed_name = pathlib.Path(rename_res.group('cwd2'))/ rename_res.group('renamed')
-                    renamed_file = RenamedFile(timestamp, original_name, renamed_name)
+                        original_name = pathlib.Path(rename_res.group('original'))
+                        original_cwd = pathlib.Path(rename_res.group('cwd'))
+                        renamed_name = pathlib.Path(rename_res.group('renamed'))
+                        renamed_cwd = pathlib.Path(rename_res.group('cwd2'))
+                    renamed_file = RenamedFile(timestamp, original_name, original_cwd, renamed_name, renamed_cwd)
                     renamed.append(renamed_file)
             elif syscall in ['symlinkat']:
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
