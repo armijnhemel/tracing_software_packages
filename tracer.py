@@ -333,17 +333,26 @@ def get_open_files(infile):
 
     opened_files = set()
     renamed_files = set()
+    renamed_to_orig = {}
     for pid in data:
+        for opened_file in data[pid].renamed_files:
+            renamed_files.add(opened_file)
+            renamed_to_orig[opened_file.renamed_cwd / opened_file.renamed_name] = opened_file.original_cwd / opened_file.original_name
         for opened_file in data[pid].opened_files:
             if opened_file.is_directory:
                 # directories can be safely skipped
                 continue
+
+            # TODO: also check for the original name,
+            # not just the fully resolved path
+            if opened_file.resolved_path in renamed_to_orig:
+                opened_path = renamed_to_orig[opened_file.resolved_path]
+            else:
+                opened_path = opened_file.resolved_path
             if opened_file.is_read:
-                inputs.add(opened_file.resolved_path)
+                inputs.add(opened_path)
             if opened_file.is_written:
-                outputs.add(opened_file.resolved_path)
-        for opened_file in data[pid].renamed_files:
-            renamed_files.add(opened_file)
+                outputs.add(opened_path)
 
     source_files = []
     system_files = []
