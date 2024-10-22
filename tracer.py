@@ -431,7 +431,7 @@ def copy_files(infile, source_directory, output_directory, debug):
             # TODO: symlinks
             if debug:
                 print(f"copying {source_file}", file=sys.stderr)
-            shutil.copy(copy_path, destination)
+            shutil.copy(source_file, destination)
 
 
 @app.command(short_help='Process pickle file output')
