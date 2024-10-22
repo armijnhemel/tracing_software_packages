@@ -8,9 +8,8 @@ following system calls are used:
 
 ```console
    1779 chdir
-  15043 clone
-   5626 clone3
-2395028 close
+      4 clone3
+2395030 close
     169 dup
   14325 dup2
       1 dup3
@@ -20,7 +19,8 @@ following system calls are used:
      17 fchdir
   35277 getcwd
    1904 mkdir
-4104589 openat
+2599717 newfstatat
+4104591 openat
       4 rename
      25 renameat2
       1 symlinkat

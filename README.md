@@ -37,7 +37,7 @@ The following command will write tracefiles for a subset of system calls, with
 one trace file per process:
 
 ```console
-$ strace -o ../trace/linux-strace -e trace=chdir,getcwd,link,linkat,mkdir,open,openat,rename,renameat2,sendfile,symlink,symlinkat,unlink,unlinkat,%process,dup,dup2,dup3,close,pipe,tee,fchdir -y -Y -qq -ttt -f -ff --seccomp-bpf -s 256 make
+$ strace -o ../trace/linux-strace -e trace=chdir,getcwd,link,linkat,mkdir,newfstatat,open,openat,rename,renameat2,sendfile,symlink,symlinkat,unlink,unlinkat,%process,dup,dup2,dup3,close,pipe,tee,fchdir -y -Y -qq -ttt -f -ff --seccomp-bpf -s 256 make
 ```
 
 Compared to a "full" invocation this leaves out the following syscalls from
@@ -47,7 +47,6 @@ Compared to a "full" invocation this leaves out the following syscalls from
 * `chmod`
 * `faccessat2`
 * `fchmodat`
-* `newfstatat`
 * `readlink` (TODO: put this one back in?)
 * `statfs`
 * `utimensat`
