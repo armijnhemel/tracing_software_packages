@@ -23,6 +23,33 @@ $ strace -o ../trace/linux-strace -e trace=chdir,getcwd,link,linkat,mkdir,newfst
 This will write the individual trace files to a directory
 (`../trace/linux-strace`) which can then be processed.
 
+Compared to a "full" invocation this leaves out the following syscalls from
+`%file`:
+
+* `access`
+* `chmod`
+* `faccessat2`
+* `fchmodat`
+* `readlink` (TODO: put this one back in?)
+* `statfs`
+* `utimensat`
+
+The following syscalls (from `%file`) can possibly be ignored, but this needs
+more research:
+
+* `mkdir`
+* `unlink`
+* `unlinkat`
+
+TODO: There are probably more calls that need to be added
+* `fcntl`
+* `sendfile64`
+
+TODO: what to do with writes to files? There are sometimes zero sized files
+that are merely touched, but no content is written to them. Should write
+calls such as `write()` also be tracked?
+
+
 ## Statistics
 
 Tracing a build of the Linux kernel creates many files, and the trace files
