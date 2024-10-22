@@ -323,6 +323,7 @@ def get_open_files(infile):
     outputs = set()
 
     opened_files = set()
+    renamed_files = set()
     for pid in data:
         for opened_file in data[pid].opened_files:
             if opened_file.is_directory:
@@ -332,6 +333,8 @@ def get_open_files(infile):
                 inputs.add(opened_file.resolved_path)
             if opened_file.is_written:
                 outputs.add(opened_file.resolved_path)
+        for opened_file in data[pid].renamed_files:
+            renamed_files.add(opened_file)
 
     source_files = []
     system_files = []
@@ -347,14 +350,14 @@ def get_open_files(infile):
         else:
             system_files.append(input_file)
 
-    return (meta, source_files, system_files)
+    return (meta, source_files, system_files, renamed_files)
 
 @app.command(short_help='Print all opened files')
 @click.option('--pickle', '-p', 'infile', required=True,
               help='name of pickle file', type=click.File('rb'))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 def print_open_files(infile, debug):
-    meta, source_files, system_files = get_open_files(infile)
+    meta, source_files, system_files, renamed_files = get_open_files(infile)
 
     if system_files:
         print("System files:")
@@ -384,7 +387,7 @@ def copy_files(infile, source_directory, output_directory, debug):
     if not output_directory.is_dir():
         raise click.ClickException(f"{output_directory} does not exist or is not a directory")
 
-    meta, source_files, system_files = get_open_files(infile)
+    meta, source_files, system_files, renamed_files = get_open_files(infile)
 
     if source_files:
         for input_file in source_files:
