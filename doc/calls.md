@@ -10,7 +10,8 @@ The following calls are currently traced (but not all are processed):
 * `open` and `openat`: file is opened
 * `close` : file is closed (not processed)
 * `rename` and `renameat2` : file is renamed
-* `sendfile` : data is sent to a file (not processed)
+* `copy_file_range` : data is copied from one file to the other (not processed)
+* `sendfile` and `sendfile64` : data is sent to a file (not processed)
 * `symlink` and `symlinkat` : symbolic link to a file is created
 * `unlink` and `unlinkat` : file is deleted (not processed)
 * `dup` and `dup2` and `dup3` : file descriptor is duplicated

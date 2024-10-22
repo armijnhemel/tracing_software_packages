@@ -17,7 +17,7 @@ The following command will write tracefiles for a subset of system calls, with
 one trace file per process:
 
 ```console
-$ strace -o ../trace/linux-strace -e trace=chdir,getcwd,link,linkat,mkdir,newfstatat,open,openat,rename,renameat2,sendfile,symlink,symlinkat,unlink,unlinkat,%process,dup,dup2,dup3,close,pipe,tee,fchdir -y -Y -qq -ttt -f -ff --seccomp-bpf -s 256 make
+$ strace -o ../trace/linux-strace -e trace=chdir,getcwd,link,linkat,mkdir,newfstatat,open,openat,rename,renameat2,copy_file_range,sendfile,sendfile64,symlink,symlinkat,unlink,unlinkat,%process,dup,dup2,dup3,close,pipe,tee,fchdir -y -Y -qq -ttt -f -ff --seccomp-bpf -s 256 make
 ```
 
 This will write the individual trace files to a directory
@@ -43,7 +43,6 @@ more research:
 
 TODO: There are probably more calls that need to be added
 * `fcntl`
-* `sendfile64`
 
 TODO: what to do with writes to files? There are sometimes zero sized files
 that are merely touched, but no content is written to them. Should write
