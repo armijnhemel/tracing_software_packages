@@ -76,6 +76,8 @@ symlinkat_re = re.compile(r"symlinkat\(\"(?P<target>[\w\d\s/\.+\-_,]+)\",\s+(?P<
 dup2_re = re.compile(r"dup2\((?P<old_fd>\d+)<(?P<old_fd_resolved>[\d\w/\-+_\.:\[\]]+)>,\s+(?P<new_fd>\d+)<?(?P<new_fd_resolved>[\d\w/\-+_\.:\[\]]+)?>?")
 #dup3
 
+newfstatat_re = re.compile(r"newfstatat\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<path>[\w\d\s\./\-+]*)\",\s+{")
+
 
 class TraceProcess:
     '''Helper class to store information about a single process'''
@@ -86,6 +88,7 @@ class TraceProcess:
         self._pid_label = pid
         self._opened_files = []
         self._renamed_files = []
+        self._statted_files = []
         self._children = []
         self._command = None
 
@@ -128,6 +131,51 @@ class TraceProcess:
     @renamed_files.setter
     def renamed_files(self, renamed_files):
         self._renamed_files = renamed_files
+
+    @property
+    def statted_files(self):
+        return self._statted_files
+
+    @statted_files.setter
+    def statted_files(self, statted_files):
+        self._statted_files = statted_files
+
+
+class StatFile:
+    '''Helper class to store information about a file queried by stat '''
+    def __init__(self, cwd, original_path, fd, timestamp):
+        self._cwd = cwd
+        self._original_path = original_path
+        self._fd = fd
+        self._timestamp = timestamp
+
+    @property
+    def cwd(self):
+        return self._cwd
+
+    @property
+    def fd(self):
+        return self._fd
+
+    @fd.setter
+    def fd(self, fd):
+        self._fd = fd
+
+    @property
+    def flags(self):
+        return self._flags
+
+    @property
+    def original_path(self):
+        return self._original_path
+
+    @property
+    def resolved_path(self):
+        return self._resolved_path
+
+    @property
+    def timestamp(self):
+        return self._timestamp
 
 
 class OpenedFile:
@@ -325,6 +373,7 @@ def get_open_files(infile):
 
     inputs = set()
     outputs = set()
+    statted = set()
 
     opened_files = set()
     renamed_files = set()
@@ -348,6 +397,8 @@ def get_open_files(infile):
                 inputs.add(opened_path)
             if opened_file.is_written:
                 outputs.add(opened_path)
+        for opened_file in data[pid].statted_files:
+            statted.add(opened_file.original_path)
 
     source_files = []
     system_files = []
@@ -363,14 +414,33 @@ def get_open_files(infile):
         else:
             system_files.append(input_file)
 
-    return (meta, source_files, system_files, renamed_files)
+    source_files_statted = []
+    system_files_statted = []
+
+    for input_file in sorted(statted):
+        if input_file.is_relative_to('/proc'):
+            continue
+        if input_file.is_relative_to('/dev'):
+            continue
+        if input_file == meta['basepath']:
+            continue
+        if input_file in inputs:
+            continue
+        if input_file in outputs:
+            continue
+        if input_file.is_relative_to(meta['basepath']):
+            source_files_statted.append(input_file)
+        else:
+            system_files_statted.append(input_file)
+
+    return (meta, source_files, system_files, renamed_files, source_files_statted)
 
 @app.command(short_help='Print all opened files')
 @click.option('--pickle', '-p', 'infile', required=True,
               help='name of pickle file', type=click.File('rb'))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 def print_open_files(infile, debug):
-    meta, source_files, system_files, renamed_files = get_open_files(infile)
+    meta, source_files, system_files, renamed_files, source_files_statted = get_open_files(infile)
 
     if system_files:
         print("System files:")
@@ -400,33 +470,44 @@ def copy_files(infile, source_directory, output_directory, debug):
     if not output_directory.is_dir():
         raise click.ClickException(f"{output_directory} does not exist or is not a directory")
 
-    meta, source_files, system_files, renamed_files = get_open_files(infile)
+    meta, source_files, system_files, renamed_files, source_files_statted = get_open_files(infile)
 
-    if source_files:
-        # first gather all the file paths to be copied
-        copy_files = []
-        for input_file in source_files:
-            source_file = input_file.relative_to(meta['basepath'])
-            copy_path = source_directory / source_file
-            if not copy_path.exists():
-                print(f"Expected path {copy_path} does not exist, exiting...", file=sys.stderr)
-                sys.exit()
+    copy_files = []
 
-            destination = output_directory / source_file
+    # first gather all the file paths to be copied
+    for input_file in source_files_statted:
+        source_file = input_file.relative_to(meta['basepath'])
+        copy_path = source_directory / source_file
+        if not copy_path.exists():
+            continue
+        if not copy_path.is_file():
+            continue
+        destination = output_directory / source_file
 
-            copy_files.append((copy_path, destination))
+        copy_files.append((copy_path, destination))
 
-        # then copy all the files.
-        for source_file, destination in copy_files:
-            # first make sure the subdirectory exists
-            if source_file.parent != '.':
-                destination.parent.mkdir(parents=True, exist_ok=True)
+    for input_file in source_files:
+        source_file = input_file.relative_to(meta['basepath'])
+        copy_path = source_directory / source_file
+        if not copy_path.exists():
+            print(f"Expected path {copy_path} does not exist, exiting...", file=sys.stderr)
+            sys.exit()
 
-            # then copy the file
-            # TODO: symlinks
-            if debug:
-                print(f"copying {source_file}", file=sys.stderr)
-            shutil.copy(source_file, destination)
+        destination = output_directory / source_file
+
+        copy_files.append((copy_path, destination))
+
+    # then copy all the files.
+    for source_file, destination in copy_files:
+        # first make sure the subdirectory exists
+        if source_file.parent != '.':
+            destination.parent.mkdir(parents=True, exist_ok=True)
+
+        # then copy the file
+        # TODO: symlinks
+        if debug:
+            print(f"copying {source_file}", file=sys.stderr)
+        shutil.copy(source_file, destination)
 
 
 @app.command(short_help='Process pickle file output')
@@ -543,6 +624,7 @@ def process_tracefile(tracefile, parent, debug):
     closed = set()
     opened = []
     renamed = []
+    statted = []
     pid = tracefile.suffix[1:]
 
     # data inherited from the parent process
@@ -658,6 +740,17 @@ def process_tracefile(tracefile, parent, debug):
                 getcwd_result = getcwd_re.search(line)
                 if getcwd_result:
                     cwd = pathlib.Path(os.path.normpath(getcwd_result.group('cwd')))
+            elif syscall == 'newfstatat':
+                if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                    continue
+                newfstatat_res = newfstatat_re.search(line)
+                if newfstatat_res:
+                    orig_path = pathlib.Path(newfstatat_res.group('cwd')) / newfstatat_res.group('path')
+                    fd = newfstatat_res.group('open_fd')
+
+                    timestamp = float(line.split(' ', maxsplit=1)[0])
+                    stat_file = StatFile(pathlib.Path(newfstatat_res.group('cwd')), orig_path, fd, timestamp)
+                    statted.append(stat_file)
             elif syscall in ['openat']:
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
@@ -719,6 +812,7 @@ def process_tracefile(tracefile, parent, debug):
     trace_process.children = children
     trace_process.opened_files = opened
     trace_process.renamed_files = renamed
+    trace_process.statted_files = statted
     trace_process.command = command
 
     # store the results in the global RESULTS dict
