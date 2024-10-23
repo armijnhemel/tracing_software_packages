@@ -462,7 +462,8 @@ def print_open_files(infile, debug):
 @click.option('--output-directory', '-o', 'output_directory', required=True,
               help='output directory', type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
-def copy_files(infile, source_directory, output_directory, debug):
+@click.option('--ignore-stat', is_flag=True, help='ignore files that are merely stat\'ed')
+def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
     # a directory with all the tracefiles
     if not source_directory.is_dir():
         raise click.ClickException(f"{source_directory} does not exist or is not a directory")
@@ -474,17 +475,20 @@ def copy_files(infile, source_directory, output_directory, debug):
 
     copy_files = []
 
-    # first gather all the file paths to be copied
-    for input_file in source_files_statted:
-        source_file = input_file.relative_to(meta['basepath'])
-        copy_path = source_directory / source_file
-        if not copy_path.exists():
-            continue
-        if not copy_path.is_file():
-            continue
-        destination = output_directory / source_file
+    # first gather all the file paths to be copied. Ignoring
+    # files that are merely stat'ed can indicate issues in the
+    # build process, like files being unnecessarily included.
+    if not ignore_stat:
+        for input_file in source_files_statted:
+            source_file = input_file.relative_to(meta['basepath'])
+            copy_path = source_directory / source_file
+            if not copy_path.exists():
+                continue
+            if not copy_path.is_file():
+                continue
+            destination = output_directory / source_file
 
-        copy_files.append((copy_path, destination))
+            copy_files.append((copy_path, destination))
 
     for input_file in source_files:
         source_file = input_file.relative_to(meta['basepath'])
