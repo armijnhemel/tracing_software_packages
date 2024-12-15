@@ -499,6 +499,9 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
             print(f"Expected path {copy_path} does not exist, exiting...", file=sys.stderr)
             sys.exit()
 
+        if not copy_path.is_file():
+            continue
+
         destination = output_directory / source_file
 
         if debug:
