@@ -24,7 +24,7 @@ import sys
 import click
 import pydot
 
-# these directories can be safely ignored as inputs or outputs
+# these directories can (possibly) be safely ignored as inputs or outputs
 IGNORE_DIRECTORIES = ['/dev/', '/proc/', '/sys/']
 
 # a global variable for storing results. This is kind of ugly, but since
