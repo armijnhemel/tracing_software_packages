@@ -501,6 +501,8 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
 
         destination = output_directory / source_file
 
+        if debug:
+            print(f"adding {copy_path} to copy_files", file=sys.stderr)
         copy_files.append((copy_path, destination))
 
     # then copy all the files.
