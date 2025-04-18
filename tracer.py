@@ -79,14 +79,31 @@ newfstatat_re = re.compile(r"newfstatat\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\
 class TraceProcess:
     '''Helper class to store information about a single process'''
     def __init__(self, parent_pid, pid):
+        # The original parent PID
         self._parent_pid = parent_pid
+
+        # The label for the parent PID. This is
+        # initially set to the parent PID
         self._parent_pid_label = parent_pid
+
+        # The original PID
         self._pid = pid
+
+        # The PID label is initially set to
+        # the PID itself.
         self._pid_label = pid
+
+        # Files that were opened by this process (entire lifetime)
         self._opened_files = []
+
+        # Files that were renamed by this process (entire lifetime)
         self._renamed_files = []
+
+        # Files that were renamed by this process (entire lifetime)
         self._statted_files = []
         self._children = []
+
+        # The shell command associated with the process
         self._command = None
 
     @property
@@ -625,10 +642,13 @@ def process_tracefile(tracefile, parent, debug):
     for opened_file in parent_opened:
         open_fds[opened_file.fd] = opened_file
 
+    # Create the trace process object and associate the
+    # PID and the parent with this process.
     trace_process = TraceProcess(parent_pid, pid)
 
     with open(tracefile, 'r') as file_to_process:
         for line in file_to_process:
+            # Skip lines that do not contain tracing information
             if '=' not in line:
                 continue
 
