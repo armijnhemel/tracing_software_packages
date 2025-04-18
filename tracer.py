@@ -470,7 +470,6 @@ def print_open_files(infile, debug):
             print_path = input_file.relative_to(meta['basepath'])
             print(f"- {print_path}")
 
-
 @app.command(short_help='Copy source code files')
 @click.option('--pickle', '-p', 'infile', required=True,
               help='name of pickle file', type=click.File('rb'))
@@ -481,10 +480,11 @@ def print_open_files(infile, debug):
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 @click.option('--ignore-stat', is_flag=True, help='ignore files that are merely stat\'ed')
 def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
-    # a directory with all the tracefiles
+    # directory with original source code files
     if not source_directory.is_dir():
         raise click.ClickException(f"{source_directory} does not exist or is not a directory")
 
+    # directory where files should be copied to
     if not output_directory.is_dir():
         raise click.ClickException(f"{output_directory} does not exist or is not a directory")
 
@@ -492,9 +492,9 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
 
     copy_files = []
 
-    # first gather all the file paths to be copied. Ignoring
-    # files that are merely stat'ed can indicate issues in the
-    # build process, like files being unnecessarily included.
+    # Ignoring files that are merely stat'ed can indicate issues
+    # in the build process, like files being unnecessarily needed
+    # (but not actually used) during the build.
     if not ignore_stat:
         for input_file in source_files_statted:
             source_file = input_file.relative_to(meta['basepath'])
@@ -507,6 +507,7 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
 
             copy_files.append((copy_path, destination))
 
+    # Gather all the file paths that were actually opened.
     for input_file in source_files:
         source_file = input_file.relative_to(meta['basepath'])
         copy_path = source_directory / source_file
@@ -523,13 +524,13 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
             print(f"adding {copy_path} to copy_files", file=sys.stderr)
         copy_files.append((copy_path, destination))
 
-    # then copy all the files.
+    # Copy all the files that should be copied to the output directory,
+    # including the full subdirectory name.
     for source_file, destination in copy_files:
         # first make sure the subdirectory exists
         if source_file.parent != '.':
             destination.parent.mkdir(parents=True, exist_ok=True)
 
-        # then copy the file
         # TODO: symlinks
         if debug:
             print(f"copying {source_file}", file=sys.stderr)
@@ -619,8 +620,6 @@ def traverse(infile, debug, searchpath):
             #print(pid, inputs_per_pid[pid])
         except IndexError:
             break
-
-
 
 def process_tracefile(tracefile, parent, debug):
     '''Process a single tracefile'''
