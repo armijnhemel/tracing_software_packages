@@ -305,6 +305,7 @@ def app():
 @click.option('--out', '-o', 'outfile', required=True,
               help='name of output file', type=click.File('wb'))
 def process_trace(basepath, buildid, tracefiles, outfile, debug):
+    '''Top level trace processor'''
     if not basepath.is_absolute():
         raise click.ClickException("--basepath should be an absolute path")
 
@@ -315,30 +316,28 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
     if buildid.strip() == "":
         raise click.ClickException("build identifier empty")
 
-    # lookup table for PIDs to a unique PID label. This is done because PIDs
-    # can be reused for processes especially for long running builds such
-    # as the Linux kernel.
+    # Create a lookup table for PIDs to a unique PID label. This is done
+    # because PIDs can be reused for processes especially for long running
+    # builds such as the Linux kernel. The value of the PID actually isn't
+    # interesting at all, but it will be referenced by various system calls.
     pid_to_label = {}
 
-    # store the (unique) paths of programs that are used during the build
+    # Store the (unique) paths of programs that are used during the build
     # process, typically in execve()
     exec_programs = set()
 
-    # store which processes create other processes and vice versa
+    # Store which processes create other processes
     parent_to_pid = {}
-
-    # all opened files per pid (except non-existing files)
-    opened_files_per_pid = {}
-
-    # store the inputs and outputs per pid
-    inputs_per_pid = {}
-    outputs_per_pid= {}
 
     # a list of files created or overwritten, so can be ignored
     # later on for example when copying files.
     ignore_files = set()
 
-    # find the start tracefile
+    # Find the top level tracefile by looking at the first trace line of
+    # every file, extracting the timestamp recorded and keeping track of the
+    # earliest timestamp. The file with the earliest timestamp is the root
+    # of the trace. Of course this will only work if the collection of trace
+    # files is complete and the top level trace file is included as well.
     earliest = float('inf')
     for tracefile in tracefiles.glob('**/*'):
         pid = tracefile.suffix[1:]
@@ -355,10 +354,10 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
     if debug:
         print("ROOT PID", default_pid, file=sys.stderr)
 
-    # process the first tracefile
+    # Process the first tracefile
     process_tracefile(rootfile, {'pid': 'root', 'opened': [], 'cwd': ''}, debug)
 
-    # write the results to a pickle
+    # Write all the results to a pickle
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': basepath}
     pickle.dump([meta, RESULTS], outfile)
 
@@ -629,6 +628,7 @@ def traverse(infile, debug, searchpath):
 
 
 def process_tracefile(tracefile, parent, debug):
+    '''Process a single tracefile'''
     # local information
     children = []
     command = None
