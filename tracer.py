@@ -22,7 +22,6 @@ import shutil
 import sys
 
 import click
-import pydot
 
 # these directories can (possibly) be safely ignored as inputs or outputs
 IGNORE_DIRECTORIES = ['/dev/', '/proc/', '/sys/']
@@ -604,27 +603,6 @@ def traverse(infile, debug, searchpath):
         except IndexError:
             break
 
-
-    '''
-    graph = pydot.Dot("pid_graph", graph_type="graph")
-    first_node = pydot.Node(meta['root'])
-    graph.add_node(first_node)
-
-    pid_deque = collections.deque()
-    pid_deque.append((first_node, meta['root']))
-
-    while True:
-        try:
-            node, pid = pid_deque.popleft()
-            for child_pid in data[pid].children:
-                node = pydot.Node(child_pid)
-                graph.add_node(node)
-                edge = pydot.Edge(pid, child_pid)
-                graph.add_edge(edge)
-                pid_deque.append((node, child_pid))
-        except IndexError:
-            break
-    '''
 
 
 def process_tracefile(tracefile, parent, debug):
