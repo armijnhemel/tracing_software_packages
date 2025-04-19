@@ -371,7 +371,7 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
         print("ROOT PID", default_pid, file=sys.stderr)
 
     # Process the first tracefile
-    process_tracefile(rootfile, default_pid, {'pid': 'root', 'opened': [], 'cwd': ''}, debug)
+    process_single_tracefile(rootfile, default_pid, {'pid': 'root', 'opened': [], 'cwd': ''}, debug)
 
     # Write all the results to a pickle
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': basepath}
@@ -630,7 +630,7 @@ def traverse(infile, debug, searchpath):
         except IndexError:
             break
 
-def process_tracefile(tracefile, pid, parent, debug):
+def process_single_tracefile(tracefile, pid, parent, debug):
     '''Process a single tracefile'''
     # local information
     children = []
@@ -718,7 +718,7 @@ def process_tracefile(tracefile, pid, parent, debug):
 
                 # now process the child process
                 child_tracefile = tracefile.with_suffix(f'.{clone_pid}')
-                process_tracefile(child_tracefile, clone_pid, {'pid': pid, 'opened': children_opened, 'cwd': cwd}, debug)
+                process_single_tracefile(child_tracefile, clone_pid, {'pid': pid, 'opened': children_opened, 'cwd': cwd}, debug)
 
             elif syscall == 'close':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
