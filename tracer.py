@@ -176,10 +176,6 @@ class StatFile:
         self._fd = fd
 
     @property
-    def flags(self):
-        return self._flags
-
-    @property
     def original_path(self):
         return self._original_path
 
@@ -499,7 +495,7 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
 
     meta, source_files, system_files, renamed_files, source_files_statted = get_open_files(infile, debug)
 
-    copy_files = []
+    files_to_copy = []
 
     # Ignoring files that are merely stat'ed can indicate issues
     # in the build process, like files being unnecessarily needed
@@ -514,7 +510,7 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
                 continue
             destination = output_directory / source_file
 
-            copy_files.append((copy_path, destination))
+            files_to_copy.append((copy_path, destination))
 
     # Gather all the file paths that were actually opened.
     for input_file in source_files:
@@ -530,12 +526,12 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
         destination = output_directory / source_file
 
         if debug:
-            print(f"adding {copy_path} to copy_files", file=sys.stderr)
-        copy_files.append((copy_path, destination))
+            print(f"adding {copy_path} to files_to_copy", file=sys.stderr)
+        files_to_copy.append((copy_path, destination))
 
     # Copy all the files that should be copied to the output directory,
     # including the full subdirectory name.
-    for source_file, destination in copy_files:
+    for source_file, destination in files_to_copy:
         # first make sure the subdirectory exists
         if source_file.parent != '.':
             destination.parent.mkdir(parents=True, exist_ok=True)
