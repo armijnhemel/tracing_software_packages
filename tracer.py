@@ -366,8 +366,10 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
     if debug:
         print("ROOT PID", default_pid, file=sys.stderr)
 
+    cwd = ''
+
     # Process the first tracefile
-    process_single_tracefile(rootfile, default_pid, {'pid': 'root', 'opened': [], 'cwd': ''}, debug)
+    process_single_tracefile(rootfile, default_pid, {'pid': 'root', 'opened': []}, cwd, debug)
 
     # Write all the results to a pickle
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': basepath}
@@ -626,7 +628,7 @@ def traverse(infile, debug, searchpath):
         except IndexError:
             break
 
-def process_single_tracefile(tracefile, pid, parent, debug):
+def process_single_tracefile(tracefile, pid, parent, cwd, debug):
     '''Process a single tracefile'''
     # local information
     children = []
@@ -639,7 +641,6 @@ def process_single_tracefile(tracefile, pid, parent, debug):
     # data inherited from the parent process
     parent_pid = parent['pid']
     parent_opened = parent['opened']
-    cwd = parent['cwd']
 
     open_fds = {}
     for opened_file in parent_opened:
@@ -688,6 +689,8 @@ def process_single_tracefile(tracefile, pid, parent, debug):
                         cwd = chdir_path
                     else:
                         cwd = pathlib.Path(os.path.normpath(cwd / chdir_path))
+                elif debug:
+                    print('chdir/fchdir failed:', line, file=sys.stderr)
             elif syscall in ['clone', 'clone3', 'vfork']:
                 # cloned/forked processes inherit the cwd of the parent process.
                 # First retrieve the information for the parent process and
@@ -700,6 +703,8 @@ def process_single_tracefile(tracefile, pid, parent, debug):
                 elif syscall == 'vfork':
                     cloneres = vfork_re.search(line)
                 if not cloneres:
+                    if debug:
+                        print('clone/clone3/vfork failed:', line, file=sys.stderr)
                     continue
 
                 # this is the PID of the cloned process
@@ -714,13 +719,15 @@ def process_single_tracefile(tracefile, pid, parent, debug):
 
                 # now process the child process
                 child_tracefile = tracefile.with_suffix(f'.{clone_pid}')
-                process_single_tracefile(child_tracefile, clone_pid, {'pid': pid, 'opened': children_opened, 'cwd': cwd}, debug)
+                process_single_tracefile(child_tracefile, clone_pid, {'pid': pid, 'opened': children_opened}, cwd, debug)
 
             elif syscall == 'close':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
                 close_res = close_re.search(line)
                 if not close_res:
+                    if debug:
+                        print('close failed:', line, file=sys.stderr)
                     continue
                 closed.add(close_res.group('path'))
                 fd = close_res.group('fd')
@@ -748,10 +755,14 @@ def process_single_tracefile(tracefile, pid, parent, debug):
                 execveres = execve_re.search(line)
                 if execveres:
                     command = {'command': execveres.group('command'), 'args': execveres.group('args')}
+                elif debug:
+                    print('execve failed:', line, file=sys.stderr)
             elif syscall == 'getcwd':
                 getcwd_result = getcwd_re.search(line)
                 if getcwd_result:
                     cwd = pathlib.Path(os.path.normpath(getcwd_result.group('cwd')))
+                elif debug:
+                    print('getcwd failed:', line, file=sys.stderr)
             elif syscall == 'newfstatat':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
@@ -763,6 +774,8 @@ def process_single_tracefile(tracefile, pid, parent, debug):
                     timestamp = float(line.split(' ', maxsplit=1)[0])
                     stat_file = StatFile(pathlib.Path(newfstatat_res.group('cwd')), orig_path, fd, timestamp)
                     statted.append(stat_file)
+                elif debug:
+                    print('newfstatat failed:', line, file=sys.stderr)
             elif syscall in ['openat']:
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
@@ -785,6 +798,8 @@ def process_single_tracefile(tracefile, pid, parent, debug):
                         opened_file = OpenedFile(pathlib.Path(openres.group('cwd')), flags, orig_path, resolved_path, fd, timestamp)
                         opened.append(opened_file)
                         open_fds[fd] = opened_file
+                elif debug:
+                    print('openat failed:', line, file=sys.stderr)
             elif syscall in ['rename', 'renameat2']:
                 # renaming is important to track.
                 # Example: in the Linux kernel the file include/config/auto.conf
@@ -809,6 +824,8 @@ def process_single_tracefile(tracefile, pid, parent, debug):
                         renamed_cwd = pathlib.Path(rename_res.group('cwd2'))
                     renamed_file = RenamedFile(timestamp, original_name, original_cwd, renamed_name, renamed_cwd)
                     renamed.append(renamed_file)
+                elif debug:
+                    print('rename/renameat failed:', line, file=sys.stderr)
             elif syscall in ['symlinkat']:
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
@@ -819,6 +836,8 @@ def process_single_tracefile(tracefile, pid, parent, debug):
                     if syscall == 'symlinkat':
                         target = pathlib.Path(symlink_res.group('target'))
                         linkpath = pathlib.Path(symlink_res.group('linkpath'))
+                elif debug:
+                    print('symlinkat failed:', line, file=sys.stderr)
 
     # store the results for the trace process
     trace_process.children = children
