@@ -23,7 +23,10 @@ import sys
 
 import click
 
-# these directories can (possibly) be safely ignored as inputs or outputs
+# these system calls can safely be ignored as inputs or outputs
+IGNORE_SYSCALLS = ['wait4', 'exit_group', 'lseek']:
+
+# these directories can (possibly) safely be ignored as inputs or outputs
 IGNORE_DIRECTORIES = ['/dev/', '/proc/', '/sys/']
 
 # a global variable for storing results. This is kind of ugly, but since
@@ -664,7 +667,7 @@ def process_single_tracefile(tracefile, pid, parent, cwd, debug):
             syscall = syscall_result.group('syscall')
 
             # skip uninteresting system calls
-            if syscall in ['wait4', 'exit_group']:
+            if syscall in IGNORE_SYSCALLS:
                 continue
 
             if debug:
