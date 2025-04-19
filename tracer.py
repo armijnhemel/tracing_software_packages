@@ -371,7 +371,7 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
         print("ROOT PID", default_pid, file=sys.stderr)
 
     # Process the first tracefile
-    process_tracefile(rootfile, {'pid': 'root', 'opened': [], 'cwd': ''}, debug)
+    process_tracefile(rootfile, default_pid, {'pid': 'root', 'opened': [], 'cwd': ''}, debug)
 
     # Write all the results to a pickle
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': basepath}
@@ -417,6 +417,9 @@ def get_open_files(infile, debug=False):
         for opened_file in data[pid].statted_files:
             statted.add(opened_file.original_path)
 
+    if debug:
+        print(f"{datetime.datetime.now(datetime.UTC).isoformat()} - Finished opened renamed", file=sys.stderr)
+
     source_files = []
     system_files = []
     for input_file in sorted(inputs.difference(outputs)):
@@ -430,6 +433,9 @@ def get_open_files(infile, debug=False):
             source_files.append(input_file)
         else:
             system_files.append(input_file)
+
+    if debug:
+        print(f"{datetime.datetime.now(datetime.UTC).isoformat()} - Finished opened splitting", file=sys.stderr)
 
     source_files_statted = []
     system_files_statted = []
@@ -449,6 +455,9 @@ def get_open_files(infile, debug=False):
             source_files_statted.append(input_file)
         else:
             system_files_statted.append(input_file)
+
+    if debug:
+        print(f"{datetime.datetime.now(datetime.UTC).isoformat()} - Finished stat'ed splitting", file=sys.stderr)
 
     return (meta, source_files, system_files, renamed_files, source_files_statted)
 
@@ -621,7 +630,7 @@ def traverse(infile, debug, searchpath):
         except IndexError:
             break
 
-def process_tracefile(tracefile, parent, debug):
+def process_tracefile(tracefile, pid, parent, debug):
     '''Process a single tracefile'''
     # local information
     children = []
@@ -630,7 +639,6 @@ def process_tracefile(tracefile, parent, debug):
     opened = []
     renamed = []
     statted = []
-    pid = tracefile.suffix[1:]
 
     # data inherited from the parent process
     parent_pid = parent['pid']
@@ -710,7 +718,7 @@ def process_tracefile(tracefile, parent, debug):
 
                 # now process the child process
                 child_tracefile = tracefile.with_suffix(f'.{clone_pid}')
-                process_tracefile(child_tracefile, {'pid': pid, 'opened': children_opened, 'cwd': cwd}, debug)
+                process_tracefile(child_tracefile, clone_pid, {'pid': pid, 'opened': children_opened, 'cwd': cwd}, debug)
 
             elif syscall == 'close':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
