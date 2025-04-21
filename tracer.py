@@ -78,7 +78,7 @@ dup2_re = re.compile(r"dup2\((?P<old_fd>\d+)<(?P<old_fd_resolved>[\d\w/\-+_\.:\[
 
 # pipe2
 # Example: pipe2([3<pipe:[1714585]>, 4<pipe:[1714585]>], O_CLOEXEC) = 0
-pipe2_re = re.compile(r"pipe2\(\[(?P<read_end>\d+)<pipe:\[(?P<read_pipe>\d+)\]>,\s+(?P<write_end>\d+)<pipe:\[(?P<write_pipe>\d+)\]>\],\s+[\w\d]+\)\s+=\s+(?P<returncode>\d+)")
+pipe2_re = re.compile(r"pipe2\(\[(?P<read_fd>\d+)<pipe:\[(?P<read_pipe>\d+)\]>,\s+(?P<write_fd>\d+)<pipe:\[(?P<write_pipe>\d+)\]>\],\s+[\w\d]+\)\s+=\s+(?P<returncode>\d+)")
 
 # stat, statx, newfstatat
 newfstatat_re = re.compile(r"newfstatat\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<path>[\w\d\s\./\-+]*)\",\s+{")
@@ -812,6 +812,15 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
                         open_fds[fd] = opened_file
                 elif debug:
                     print('openat failed:', line, file=sys.stderr)
+            elif syscall in ['pipe2']:
+                pipe_res = pipe2_re.search(line)
+                if pipe_res:
+                    read_fd = pipe_res.group('read_fd')
+                    write_fd = pipe_res.group('write_fd')
+                    if write_fd in open_fds:
+                        open_fds[read_fd] = copy.deepcopy(open_fds[write_fd])
+                elif debug:
+                    print('pipe2 failed:', line, file=sys.stderr)
             elif syscall in ['rename', 'renameat2']:
                 # renaming is important to track.
                 # Example: in the Linux kernel the file include/config/auto.conf
