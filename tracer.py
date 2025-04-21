@@ -71,9 +71,10 @@ execve_re = re.compile(r"execve\(\"(?P<command>.*)\",\s*\[(?P<args>.*)\],\s+0x\w
 # symlink_re =
 symlinkat_re = re.compile(r"symlinkat\(\"(?P<target>[\w\d\s/\.+\-_,]+)\",\s+(?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<linkpath>[\w\d\s/\.+\-_,]+)\"\)\s+=\s+(?P<returncode>\d+)")
 
-# dup
-#dup
-dup2_re = re.compile(r"dup2\((?P<old_fd>\d+)<(?P<old_fd_resolved>[\d\w/\-+_\.:\[\]]+)>,\s+(?P<new_fd>\d+)<?(?P<new_fd_resolved>[\d\w/\-+_\.:\[\]]+)?>?")
+# dup + dup2 - fd_resolved only needs to be grabbed once as it
+# will always be the same for both fds.
+dup_re = re.compile(r"dup\((?P<old_fd>\d+)<(?P<fd_resolved>[\d\w/\-+_\.:\[\]]+)>\)\s+=\s+(?P<new_fd>\d+)")
+dup2_re = re.compile(r"dup2\((?P<old_fd>\d+)<(?P<fd_resolved>[\d\w/\-+_\.:\[\]]+)>,\s+(?P<new_fd>\d+)")
 #dup3
 
 # pipe2
