@@ -57,3 +57,19 @@ Y it cannot be excluded that A is an input.
 To be even more accurate there could be checks to see if data was actually read
 from the inputs or written to the outputs, by looking at `read`, `write`,
 `sendfile`, `copy_file_range`, and so on.
+
+## Pipes
+
+The [original paper](TUD-SERG-2012-010.pdf) says on page 9:
+
+```
+Most importantly, the trace analyser does not trace file descriptors and
+inter-process communication (e.g. through pipes) yet. For instance, it fails
+to see that the task patch in the command cat foo.patch | patch bar.c has a
+dependency on foo.patch; it only sees that patch reads and recreates bar.c.
+```
+
+File descriptors to pipes can be passed around from parent processes to child
+processes (or children of child processes, or children of children of child
+processes, etc.). This allows child processes to communicate with parent
+processes. Tracking these properly is a challenge.
