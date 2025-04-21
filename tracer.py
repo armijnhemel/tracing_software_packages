@@ -374,11 +374,11 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
     cwd = ''
 
     # Create the trace process object and associate the
-    # PID and a fictional parent with this process.
+    # PID and a fictional parent with it.
     trace_process = TraceProcess(default_pid, 'root')
 
-    # Process the first tracefile
-    #process_single_tracefile(rootfile, default_pid, {'pid': 'root', 'opened': []}, cwd, debug)
+    # Process the first tracefile. This will process the other
+    # dependent trace files recursively.
     process_single_tracefile(rootfile, trace_process, cwd, [], debug)
 
     # Write all the results to a pickle
@@ -638,9 +638,8 @@ def traverse(infile, debug, searchpath):
         except IndexError:
             break
 
-#def process_single_tracefile(tracefile, pid, parent, cwd, debug):
 def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug):
-    '''Process a single tracefile'''
+    '''Process a single trace file. Recurse into trace files for dependent processes.'''
     # local information
     children_pids = []
     command = None
@@ -649,7 +648,11 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
     renamed = []
     statted = []
 
+    # Keep state for all opened files.
     open_fds = {}
+
+    # Store the file descriptors for all opened
+    # files inherited from the parent process.
     for opened_file in parent_opened:
         open_fds[opened_file.fd] = opened_file
 
@@ -659,20 +662,21 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
             if '=' not in line:
                 continue
 
-            # grab the name of the system call.
+            # Grab the name of the system call.
             syscall_result = syscall_re.match(line)
             if not syscall_result:
                 continue
 
             syscall = syscall_result.group('syscall')
 
-            # skip uninteresting system calls
+            # Skip uninteresting system calls
             if syscall in IGNORE_SYSCALLS:
                 continue
 
             if debug:
-                print(pid, syscall, file=sys.stderr)
+                print(trace_process.pid, syscall, file=sys.stderr)
 
+            # Then process the interesting system calls.
             if syscall in ['chdir', 'fchdir']:
                 if not line.rsplit('=', maxsplit=1)[1].strip().startswith('0'):
                     continue
@@ -695,10 +699,6 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
                 elif debug:
                     print('chdir/fchdir failed:', line, file=sys.stderr)
             elif syscall in ['clone', 'clone3', 'vfork']:
-                # cloned/forked processes inherit the cwd of the parent process.
-                # First retrieve the information for the parent process and
-                # store it for the cloned process.
-                flags = []
                 if syscall == 'clone':
                     cloneres = clone_re.search(line)
                 elif syscall == 'clone3':
@@ -710,17 +710,21 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
                         print('clone/clone3/vfork failed:', line, file=sys.stderr)
                     continue
 
-                # this is the PID of the cloned process
+                # the PID of the cloned process
                 clone_pid = cloneres.group('clone_pid')
+
+                flags = []
                 if syscall != 'vfork':
                     flags = cloneres.group('flags')
 
-                # store the clone as a child of the parent process
+                # Add the child PID to the children PIDs for the process.
                 children_pids.append(clone_pid)
 
+                # Cloned/forked processes inherit some information of the parent
+                # process such as the current cwd as well as currently opened files.
                 children_opened = open_fds.values()
 
-                # create a trace process and process the child process
+                # Create a trace process and process trace file for the child process.
                 child_trace_process = TraceProcess(clone_pid, trace_process.pid)
                 child_tracefile = tracefile.with_suffix(f'.{clone_pid}')
                 process_single_tracefile(child_tracefile, child_trace_process, cwd, children_opened, debug)
