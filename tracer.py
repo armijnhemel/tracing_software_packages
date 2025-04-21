@@ -24,7 +24,7 @@ import sys
 import click
 
 # these system calls can safely be ignored as inputs or outputs
-IGNORE_SYSCALLS = ['wait4', 'exit_group', 'lseek']:
+IGNORE_SYSCALLS = ['wait4', 'exit_group', 'lseek', 'utimensat']
 
 # these directories can (possibly) safely be ignored as inputs or outputs
 IGNORE_DIRECTORIES = ['/dev/', '/proc/', '/sys/']
@@ -76,12 +76,14 @@ symlinkat_re = re.compile(r"symlinkat\(\"(?P<target>[\w\d\s/\.+\-_,]+)\",\s+(?P<
 dup2_re = re.compile(r"dup2\((?P<old_fd>\d+)<(?P<old_fd_resolved>[\d\w/\-+_\.:\[\]]+)>,\s+(?P<new_fd>\d+)<?(?P<new_fd_resolved>[\d\w/\-+_\.:\[\]]+)?>?")
 #dup3
 
+# stat, statx, newfstatat
 newfstatat_re = re.compile(r"newfstatat\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<path>[\w\d\s\./\-+]*)\",\s+{")
+#statx
 
 
 class TraceProcess:
     '''Helper class to store information about a single process'''
-    def __init__(self, parent_pid, pid):
+    def __init__(self, pid, parent_pid):
         # The original parent PID
         self._parent_pid = parent_pid
 
@@ -159,7 +161,7 @@ class TraceProcess:
 
 
 class StatFile:
-    '''Helper class to store information about a file queried by stat '''
+    '''Helper class to store information about a file queried by stat.'''
     def __init__(self, cwd, original_path, fd, timestamp):
         self._cwd = cwd
         self._original_path = original_path
@@ -371,8 +373,13 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
 
     cwd = ''
 
+    # Create the trace process object and associate the
+    # PID and a fictional parent with this process.
+    trace_process = TraceProcess(default_pid, 'root')
+
     # Process the first tracefile
-    process_single_tracefile(rootfile, default_pid, {'pid': 'root', 'opened': []}, cwd, debug)
+    #process_single_tracefile(rootfile, default_pid, {'pid': 'root', 'opened': []}, cwd, debug)
+    process_single_tracefile(rootfile, trace_process, cwd, [], debug)
 
     # Write all the results to a pickle
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': basepath}
@@ -631,27 +638,20 @@ def traverse(infile, debug, searchpath):
         except IndexError:
             break
 
-def process_single_tracefile(tracefile, pid, parent, cwd, debug):
+#def process_single_tracefile(tracefile, pid, parent, cwd, debug):
+def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug):
     '''Process a single tracefile'''
     # local information
-    children = []
+    children_pids = []
     command = None
     closed = set()
     opened = []
     renamed = []
     statted = []
 
-    # data inherited from the parent process
-    parent_pid = parent['pid']
-    parent_opened = parent['opened']
-
     open_fds = {}
     for opened_file in parent_opened:
         open_fds[opened_file.fd] = opened_file
-
-    # Create the trace process object and associate the
-    # PID and the parent with this process.
-    trace_process = TraceProcess(parent_pid, pid)
 
     with open(tracefile, 'r') as file_to_process:
         for line in file_to_process:
@@ -716,13 +716,14 @@ def process_single_tracefile(tracefile, pid, parent, cwd, debug):
                     flags = cloneres.group('flags')
 
                 # store the clone as a child of the parent process
-                children.append(clone_pid)
+                children_pids.append(clone_pid)
 
                 children_opened = open_fds.values()
 
-                # now process the child process
+                # create a trace process and process the child process
+                child_trace_process = TraceProcess(clone_pid, trace_process.pid)
                 child_tracefile = tracefile.with_suffix(f'.{clone_pid}')
-                process_single_tracefile(child_tracefile, clone_pid, {'pid': pid, 'opened': children_opened}, cwd, debug)
+                process_single_tracefile(child_tracefile, child_trace_process, cwd, children_opened, debug)
 
             elif syscall == 'close':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
@@ -843,14 +844,14 @@ def process_single_tracefile(tracefile, pid, parent, cwd, debug):
                     print('symlinkat failed:', line, file=sys.stderr)
 
     # store the results for the trace process
-    trace_process.children = children
+    trace_process.children = children_pids
     trace_process.opened_files = opened
     trace_process.renamed_files = renamed
     trace_process.statted_files = statted
     trace_process.command = command
 
     # store the results in the global RESULTS dict
-    RESULTS[pid] = trace_process
+    RESULTS[trace_process.pid] = trace_process
 
 if __name__ == "__main__":
     app()
