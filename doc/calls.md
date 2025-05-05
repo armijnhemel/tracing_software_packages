@@ -15,7 +15,7 @@ The following calls are currently traced (but not all are processed):
 * `symlink` and `symlinkat` : symbolic link to a file is created
 * `unlink` and `unlinkat` : file is deleted (not processed)
 * `dup` and `dup2` and `dup3` : file descriptor is duplicated
-* `pipe` : pipe is created (not processed)
+* `pipe` and `pipe2` : pipe is created (not processed)
 * `tee` : read from stdin and write to stdout
 * `%process` : all process related calls (`vfork`, `clone`, `clone3`)
 
