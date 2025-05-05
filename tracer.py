@@ -9,7 +9,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Copyright 2017-2024 - Armijn Hemel
+# Copyright 2017-2025 - Armijn Hemel
 
 import collections
 import copy
@@ -43,7 +43,9 @@ syscall_re = re.compile(r'\d+\.\d+\s+(?P<syscall>[\d\w_]+)\(')
 chdir_re = re.compile(r"chdir\(\"(?P<path>[\w/\-_+,.]+)\"\s*\)\s+=\s+(?P<returncode>\d+)")
 fchdir_re = re.compile(r"fchdir\((?P<fd>\d+)<(?P<path>.*)>\s*\)\s+=\s+(?P<returncode>\d+)")
 
-# open
+# open and openat
+# Since glibc 2.26 this always defaults to openat(). This change was introduced
+# sometime in 2017, around Fedora 27 (for reference).
 open_re = re.compile(r"open\(\"([<>\w/\-+,.*$:;]+)\", ([\w|]+)(?:,\s+\d+)?\)\s+= (\-?\d+)<(.*)>$")
 openat_re = re.compile(r"openat\((?P<open_fd>\w+)<(?P<cwd>.*)>, \"(?P<path>[<>\w/\-+,.*$:;]+)\", (?P<flags>[\w|]+)(?:,\s+\d+)?\)\s+=\s+(?P<result_fd>\-?\d+)<(?P<resolved_path>.*)>$")
 
@@ -333,7 +335,7 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
 
     # a directory with all the tracefiles
     if not (tracefiles.exists() and tracefiles.is_dir()):
-        raise click.ClickException(f"directory with trace files {tracefiles} does not exist or is not a directory")
+        raise click.ClickException(f"{tracefiles} does not exist or is not a directory")
 
     if buildid.strip() == "":
         raise click.ClickException("build identifier empty")
@@ -653,6 +655,9 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
     renamed = []
     statted = []
 
+    # Keep state for pipes
+    fd_to_pipes = {}
+
     # Keep state for all opened files.
     open_fds = {}
 
@@ -794,12 +799,18 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
                     continue
                 openres = openat_re.search(line)
                 if openres:
-                    # store both the (resolved) original path
-                    # and the fully resolved path (related to symbolic links)
+                    # Store both the (resolved) original path
+                    # and the fully resolved path (related to symbolic links).
+                    # This include all files that are opened, including in
+                    # places such as /dev and /proc which are defined in IGNORE_DIRECTORIES.
                     orig_path = pathlib.Path(openres.group('cwd')) / openres.group('path')
                     resolved_path = pathlib.Path(openres.group('resolved_path'))
                     flags = openres.group('flags').split('|')
                     fd = openres.group('result_fd')
+
+                    if debug:
+                        print(f"PROCESS {trace_process.pid} OPENED {resolved_path}",
+                              file=sys.stderr)
 
                     already_opened = False
                     for o in opened:
@@ -814,6 +825,7 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
                 elif debug:
                     print('openat failed:', line, file=sys.stderr)
             elif syscall in ['pipe2']:
+                # Correctly processing pipes is tricky.
                 pipe_res = pipe2_re.search(line)
                 if pipe_res:
                     read_fd = pipe_res.group('read_fd')
