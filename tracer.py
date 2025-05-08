@@ -89,21 +89,15 @@ newfstatat_re = re.compile(r"newfstatat\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\
 
 
 class TraceProcess:
-    '''Helper class to store information about a single process'''
+    '''Helper class to store information about a single process.
+       At the end of trace processing this object should contain
+       the entire state of the process.'''
     def __init__(self, pid, parent_pid):
         # The original parent PID
         self._parent_pid = parent_pid
 
-        # The label for the parent PID. This is
-        # initially set to the parent PID
-        self._parent_pid_label = parent_pid
-
         # The original PID
         self._pid = pid
-
-        # The PID label is initially set to
-        # the PID itself.
-        self._pid_label = pid
 
         # Files that were opened by this process (entire lifetime)
         self._opened_files = []
@@ -339,12 +333,6 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
 
     if buildid.strip() == "":
         raise click.ClickException("build identifier empty")
-
-    # Create a lookup table for PIDs to a unique PID label. This is done
-    # because PIDs can be reused for processes especially for long running
-    # builds such as the Linux kernel. The value of the PID actually isn't
-    # interesting at all, but it will be referenced by various system calls.
-    pid_to_label = {}
 
     # Store the (unique) paths of programs that are used during the build
     # process, typically in execve()
