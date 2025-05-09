@@ -23,10 +23,7 @@ import sys
 
 import click
 
-from OpenedFile import OpenedFile
-from RenamedFile import RenamedFile
-from StatFile import StatFile
-from TraceProcess import TraceProcess
+from tracer import tracer
 
 
 # these system calls can safely be ignored as inputs or outputs
@@ -174,7 +171,7 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
 
     # Create the trace process object and associate the
     # PID and a fictional parent with it.
-    trace_process = TraceProcess(default_pid, 'root')
+    trace_process = tracer.TraceProcess(default_pid, 'root')
 
     # Process the first tracefile. This will process the other
     # dependent trace files recursively.
@@ -547,7 +544,7 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
                 children_opened = open_fds.values()
 
                 # Create a trace process and process trace file for the child process.
-                child_trace_process = TraceProcess(clone_pid, trace_process.pid)
+                child_trace_process = tracer.TraceProcess(clone_pid, trace_process.pid)
                 child_tracefile = tracefile.with_suffix(f'.{clone_pid}')
                 process_single_tracefile(child_tracefile, child_trace_process, cwd, children_opened, debug)
 
@@ -602,7 +599,7 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
                     fd = newfstatat_res.group('open_fd')
 
                     timestamp = float(line.split(' ', maxsplit=1)[0])
-                    stat_file = StatFile(pathlib.Path(newfstatat_res.group('cwd')), orig_path, fd, timestamp)
+                    stat_file = tracer.StatFile(pathlib.Path(newfstatat_res.group('cwd')), orig_path, fd, timestamp)
                     statted.append(stat_file)
                 elif debug:
                     print('newfstatat failed:', line, file=sys.stderr)
@@ -631,7 +628,7 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
                             break
                     if not already_opened:
                         timestamp = float(line.split(' ', maxsplit=1)[0])
-                        opened_file = OpenedFile(pathlib.Path(openres.group('cwd')), flags, orig_path, resolved_path, fd, timestamp)
+                        opened_file = tracer.OpenedFile(pathlib.Path(openres.group('cwd')), flags, orig_path, resolved_path, fd, timestamp)
                         opened.append(opened_file)
                         open_fds[fd] = opened_file
                 elif debug:
@@ -668,7 +665,7 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
                         original_cwd = pathlib.Path(rename_res.group('cwd'))
                         renamed_name = pathlib.Path(rename_res.group('renamed'))
                         renamed_cwd = pathlib.Path(rename_res.group('cwd2'))
-                    renamed_file = RenamedFile(timestamp, original_name, original_cwd, renamed_name, renamed_cwd)
+                    renamed_file = tracer.RenamedFile(timestamp, original_name, original_cwd, renamed_name, renamed_cwd)
                     renamed.append(renamed_file)
                 elif debug:
                     print('rename/renameat failed:', line, file=sys.stderr)
