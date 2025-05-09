@@ -93,6 +93,8 @@ class TraceProcess:
        At the end of trace processing this object should contain
        the entire state of the process.'''
     def __init__(self, pid, parent_pid):
+        '''Initialization method for the class, sets several
+           variables to default values.'''
         # The original parent PID
         self._parent_pid = parent_pid
 
@@ -383,13 +385,17 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
     if debug:
         print("END RECONSTRUCTION", datetime.datetime.now(datetime.UTC).isoformat(), file=sys.stderr)
 
-def get_open_files(infile, debug=False):
+def get_files(infile, debug=False):
+    '''Helper method to determine opened/created/statted
+       files given a result pickle.'''
     # load the data
     if debug:
-        print(f"{datetime.datetime.now(datetime.UTC).isoformat()} - Started reading trace data from {infile.name}", file=sys.stderr)
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        print(f"{now} - Started reading trace data from {infile.name}", file=sys.stderr)
     meta, data = pickle.load(infile)
     if debug:
-        print(f"{datetime.datetime.now(datetime.UTC).isoformat()} - Finished reading trace data from {infile.name}", file=sys.stderr)
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        print(f"{now} - Finished reading trace data from {infile.name}", file=sys.stderr)
 
     inputs = set()
     outputs = set()
@@ -431,7 +437,12 @@ def get_open_files(infile, debug=False):
         if input_file.is_relative_to('/dev'):
             continue
         if input_file == meta['basepath']:
+            # do not include the base directory
             continue
+
+        # now split into "source files" (part of the source code of the build)
+        # and "systen files" (already installed files on the system, or temporary
+        # files written during the build)
         if input_file.is_relative_to(meta['basepath']):
             source_files.append(input_file)
         else:
@@ -449,11 +460,18 @@ def get_open_files(infile, debug=False):
         if input_file.is_relative_to('/dev'):
             continue
         if input_file == meta['basepath']:
+            # do not include the base directory
             continue
         if input_file in inputs:
+            # do not include files that are opened
             continue
         if input_file in outputs:
+            # do not include files that are written to
             continue
+
+        # now split into "source files" (part of the source code of the build)
+        # and "systen files" (already installed files on the system, or temporary
+        # files written during the build)
         if input_file.is_relative_to(meta['basepath']):
             source_files_statted.append(input_file)
         else:
@@ -469,7 +487,8 @@ def get_open_files(infile, debug=False):
               help='name of pickle file', type=click.File('rb'))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 def print_open_files(infile, debug):
-    meta, source_files, system_files, renamed_files, source_files_statted = get_open_files(infile, debug)
+    '''Top level method to print all files that were opened during a build.'''
+    meta, source_files, system_files, renamed_files, source_files_statted = get_files(infile, debug)
 
     if system_files:
         print("System files:")
@@ -500,7 +519,7 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
     if not output_directory.is_dir():
         raise click.ClickException(f"{output_directory} does not exist or is not a directory")
 
-    meta, source_files, system_files, renamed_files, source_files_statted = get_open_files(infile, debug)
+    meta, source_files, system_files, renamed_files, source_files_statted = get_files(infile, debug)
 
     files_to_copy = []
 
