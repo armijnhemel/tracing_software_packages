@@ -427,7 +427,8 @@ def get_files(infile, debug=False):
             statted.add(opened_file.original_path)
 
     if debug:
-        print(f"{datetime.datetime.now(datetime.UTC).isoformat()} - Finished opened renamed", file=sys.stderr)
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        print(f"{now} - Finished opened renamed", file=sys.stderr)
 
     source_files = []
     system_files = []
@@ -449,7 +450,8 @@ def get_files(infile, debug=False):
             system_files.append(input_file)
 
     if debug:
-        print(f"{datetime.datetime.now(datetime.UTC).isoformat()} - Finished opened splitting", file=sys.stderr)
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        print(f"{now} - Finished opened splitting", file=sys.stderr)
 
     source_files_statted = []
     system_files_statted = []
@@ -478,7 +480,8 @@ def get_files(infile, debug=False):
             system_files_statted.append(input_file)
 
     if debug:
-        print(f"{datetime.datetime.now(datetime.UTC).isoformat()} - Finished stat'ed splitting", file=sys.stderr)
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        print(f"{now} - Finished stat'ed splitting", file=sys.stderr)
 
     return (meta, source_files, system_files, renamed_files, source_files_statted)
 
