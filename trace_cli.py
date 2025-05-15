@@ -190,15 +190,9 @@ def process_trace(basepath, buildid, tracefiles, out_directory, debug):
 def get_files(pickle_directory, debug=False):
     '''Helper method to determine opened/created/statted
        files given a result pickle.'''
-    # load the data
     if debug:
         now = datetime.datetime.now(datetime.UTC).isoformat()
         print(f"{now} - Started reading trace data from {infile.name}", file=sys.stderr)
-
-    meta, data = pickle.load(infile)
-    if debug:
-        now = datetime.datetime.now(datetime.UTC).isoformat()
-        print(f"{now} - Finished reading trace data from {infile.name}", file=sys.stderr)
 
     inputs = set()
     outputs = set()
@@ -207,27 +201,54 @@ def get_files(pickle_directory, debug=False):
     opened_files = set()
     renamed_files = set()
     renamed_to_orig = {}
-    for pid in data:
-        for opened_file in data[pid].renamed_files:
-            renamed_files.add(opened_file)
-            renamed_to_orig[opened_file.renamed_cwd / opened_file.renamed_name] = opened_file.original_cwd / opened_file.original_name
-        for opened_file in data[pid].opened_files:
-            if opened_file.is_directory:
-                # directories can be safely skipped
-                continue
 
-            # TODO: also check for the original name,
-            # not just the fully resolved path
-            if opened_file.resolved_path in renamed_to_orig:
-                opened_path = renamed_to_orig[opened_file.resolved_path]
-            else:
-                opened_path = opened_file.resolved_path
-            if opened_file.is_read:
-                inputs.add(opened_path)
-            if opened_file.is_written:
-                outputs.add(opened_path)
-        for opened_file in data[pid].statted_files:
-            statted.add(opened_file.original_path)
+    # load the data, starting with the top level meta file
+    with open(pickle_directory / 'meta.json', 'r') as meta_file:
+        meta = json.load(meta_file)
+
+    pid_deque = collections.deque()
+    pid_deque.append(meta['root'])
+
+    basepath = pathlib.Path(meta['basepath'])
+
+    # load the first pickle and then recurse
+    while True:
+        try:
+            pid = pid_deque.popleft()
+            with open(pickle_directory / f"{pid}.pickle", 'rb') as infile:
+                data = pickle.load(infile)
+                pid_deque.extend(data.children)
+                for opened_file in data.opened_files:
+                    if opened_file.is_directory:
+                        # directories can be safely skipped
+                        continue
+
+                    if opened_file.resolved_path == basepath:
+                        continue
+
+                    # TODO: also check for the original name,
+                    # not just the fully resolved path
+                    if opened_file.resolved_path in renamed_to_orig:
+                        opened_path = renamed_to_orig[opened_file.resolved_path]
+                    else:
+                        opened_path = opened_file.resolved_path
+                    if opened_file.is_read:
+                        inputs.add(opened_path)
+                    if opened_file.is_written:
+                        outputs.add(opened_path)
+
+                for opened_file in data.statted_files:
+                    statted.add(opened_file.original_path)
+
+                for opened_file in data.renamed_files:
+                    renamed_files.add(opened_file)
+                    renamed_to_orig[opened_file.renamed_cwd / opened_file.renamed_name] = opened_file.original_cwd / opened_file.original_name
+        except IndexError:
+            break
+
+    if debug:
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        print(f"{now} - Finished reading trace data from {infile.name}", file=sys.stderr)
 
     if debug:
         now = datetime.datetime.now(datetime.UTC).isoformat()
@@ -286,18 +307,17 @@ def get_files(pickle_directory, debug=False):
         now = datetime.datetime.now(datetime.UTC).isoformat()
         print(f"{now} - Finished stat'ed splitting", file=sys.stderr)
 
-    return (source_files, system_files, renamed_files, source_files_statted)
+    return (meta, source_files, system_files, renamed_files, source_files_statted)
 
 @app.command(short_help='Print all opened files')
 @click.option('--pickle', '-p', 'pickle_directory', required=True,
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
-def print_open_files(infile, debug):
+def print_open_files(pickle_directory, debug):
     '''Top level method to print all files that were opened during a build.'''
-
     meta_file = pathlib.Path(pickle_directory / 'meta.json')
     if not meta_file.exists():
-        pass
+        raise click.ClickException(f"{meta_file} does not exist")
 
     meta, source_files, system_files, renamed_files, source_files_statted = get_files(pickle_directory, debug)
 
@@ -314,15 +334,17 @@ def print_open_files(infile, debug):
             print(f"- {print_path}")
 
 @app.command(short_help='Copy source code files')
-@click.option('--pickle', '-p', 'infile', required=True,
-              help='name of pickle file', type=click.File('rb'))
+@click.option('--pickle', '-p', 'pickle_directory', required=True,
+              help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--source-directory', '-i', 'source_directory', required=True,
               help='source directory', type=click.Path(path_type=pathlib.Path))
 @click.option('--output-directory', '-o', 'output_directory', required=True,
               help='output directory', type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 @click.option('--ignore-stat', is_flag=True, help='ignore files that are merely stat\'ed')
-def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
+@click.option('--ignore-not-found', is_flag=True, help='ignore file not found errors')
+def copy_files(pickle_directory, source_directory, output_directory, ignore_stat,
+               ignore_not_found, debug):
     # directory with original source code files
     if not source_directory.is_dir():
         raise click.ClickException(f"{source_directory} does not exist or is not a directory")
@@ -331,7 +353,11 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
     if not output_directory.is_dir():
         raise click.ClickException(f"{output_directory} does not exist or is not a directory")
 
-    meta, source_files, system_files, renamed_files, source_files_statted = get_files(infile, debug)
+    meta_file = pathlib.Path(pickle_directory / 'meta.json')
+    if not meta_file.exists():
+        raise click.ClickException(f"{meta_file} does not exist")
+
+    meta, source_files, system_files, renamed_files, source_files_statted = get_files(pickle_directory, debug)
 
     files_to_copy = []
 
@@ -355,6 +381,9 @@ def copy_files(infile, source_directory, output_directory, ignore_stat, debug):
         source_file = input_file.relative_to(meta['basepath'])
         copy_path = source_directory / source_file
         if not copy_path.exists():
+            if ignore_not_found:
+                print(f"Warning: expected path {copy_path} does not exist.", file=sys.stderr)
+                continue
             print(f"Expected path {copy_path} does not exist, exiting...", file=sys.stderr)
             sys.exit()
 
