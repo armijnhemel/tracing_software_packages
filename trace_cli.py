@@ -115,8 +115,8 @@ def app():
               type=click.Path(path_type=pathlib.Path))
 @click.option('--buildid', '-u', 'buildid', required=True,
               help='build id to be associated with the build', type=str)
-@click.option('--tracefiles', '-f', 'tracefiles', required=True, help='path to trace files directory',
-              type=click.Path(path_type=pathlib.Path))
+@click.option('--tracefiles', '-f', 'tracefiles', required=True,
+              help='path to trace files directory', type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 @click.option('--out', '-o', 'out_directory', required=True,
               help='name of output directory', type=click.Path(path_type=pathlib.Path))
@@ -192,7 +192,7 @@ def get_files(pickle_directory, debug=False):
        files given a result pickle.'''
     if debug:
         now = datetime.datetime.now(datetime.UTC).isoformat()
-        print(f"{now} - Started reading trace data from {infile.name}", file=sys.stderr)
+        print(f"{now} - Started reading trace data from {pickle_directory}", file=sys.stderr)
 
     inputs = set()
     outputs = set()
@@ -248,7 +248,7 @@ def get_files(pickle_directory, debug=False):
 
     if debug:
         now = datetime.datetime.now(datetime.UTC).isoformat()
-        print(f"{now} - Finished reading trace data from {infile.name}", file=sys.stderr)
+        print(f"{now} - Finished reading trace data from {pickle_directory}", file=sys.stderr)
 
     if debug:
         now = datetime.datetime.now(datetime.UTC).isoformat()
@@ -350,8 +350,16 @@ def copy_files(pickle_directory, source_directory, output_directory, ignore_stat
         raise click.ClickException(f"{source_directory} does not exist or is not a directory")
 
     # directory where files should be copied to
-    if not output_directory.is_dir():
-        raise click.ClickException(f"{output_directory} does not exist or is not a directory")
+    try:
+        if output_directory.exists():
+            raise click.ClickException(f"{output_directory} already exists")
+    except PermissionError as e:
+        raise click.ClickException(f"Permission error for {output_directory}") from e
+
+    try:
+        output_directory.mkdir()
+    except Exception as e:
+        raise click.ClickException(f"Could not create {output_directory}") from e
 
     meta_file = pathlib.Path(pickle_directory / 'meta.json')
     if not meta_file.exists():
@@ -585,7 +593,8 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, out_d
                 # Create a trace process and process trace file for the child process.
                 child_trace_process = tracer.TraceProcess(clone_pid, trace_process.pid)
                 child_tracefile = tracefile.with_suffix(f'.{clone_pid}')
-                process_single_tracefile(child_tracefile, child_trace_process, cwd, children_opened, out_directory, debug)
+                process_single_tracefile(child_tracefile, child_trace_process, cwd,
+                                         children_opened, out_directory, debug)
 
             elif syscall == 'close':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
