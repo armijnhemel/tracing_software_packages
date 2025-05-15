@@ -14,6 +14,7 @@
 import collections
 import copy
 import datetime
+import json
 import os
 import pathlib
 import pickle
@@ -31,10 +32,6 @@ IGNORE_SYSCALLS = ['wait4', 'exit_group', 'lseek', 'utimensat']
 
 # these directories can (possibly) safely be ignored as inputs or outputs
 IGNORE_DIRECTORIES = ['/dev/', '/proc/', '/sys/']
-
-# a global variable for storing results. This is kind of ugly, but since
-# this program is running in a single thread it doesn't really matter.
-RESULTS = {}
 
 # regular expression for syscalls
 # result: syscall
@@ -112,7 +109,7 @@ def app():
     pass
 
 
-@app.command(short_help='Process strace output and write a pickle')
+@app.command(short_help='Process strace output and write pickle per trace file')
 @click.option('--basepath', '-b', 'basepath', required=True,
               help='base path of source director during build',
               type=click.Path(path_type=pathlib.Path))
@@ -121,9 +118,9 @@ def app():
 @click.option('--tracefiles', '-f', 'tracefiles', required=True, help='path to trace files directory',
               type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
-@click.option('--out', '-o', 'outfile', required=True,
-              help='name of output file', type=click.File('wb'))
-def process_trace(basepath, buildid, tracefiles, outfile, debug):
+@click.option('--out', '-o', 'out_directory', required=True,
+              help='name of output directory', type=click.Path(path_type=pathlib.Path))
+def process_trace(basepath, buildid, tracefiles, out_directory, debug):
     '''Top level trace processor'''
     if not basepath.is_absolute():
         raise click.ClickException("--basepath should be an absolute path")
@@ -134,6 +131,10 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
 
     if buildid.strip() == "":
         raise click.ClickException("build identifier empty")
+
+    # a directory with all the tracefiles
+    if not (out_directory.exists() and out_directory.is_dir()):
+        raise click.ClickException(f"{out_directory} does not exist or is not a directory")
 
     # Store the (unique) paths of programs that are used during the build
     # process, typically in execve()
@@ -175,22 +176,25 @@ def process_trace(basepath, buildid, tracefiles, outfile, debug):
 
     # Process the first tracefile. This will process the other
     # dependent trace files recursively.
-    process_single_tracefile(rootfile, trace_process, cwd, [], debug)
+    process_single_tracefile(rootfile, trace_process, cwd, [], out_directory, debug)
 
-    # Write all the results to a pickle
-    meta = {'buildid': buildid, 'root': default_pid, 'basepath': basepath}
-    pickle.dump([meta, RESULTS], outfile)
+    # Write meta results to JSON
+    meta = {'buildid': buildid, 'root': default_pid, 'basepath': str(basepath)}
+
+    with open(out_directory / "meta.json", 'w') as outfile:
+        json.dump(meta, outfile, indent=4)
 
     if debug:
         print("END RECONSTRUCTION", datetime.datetime.now(datetime.UTC).isoformat(), file=sys.stderr)
 
-def get_files(infile, debug=False):
+def get_files(pickle_directory, debug=False):
     '''Helper method to determine opened/created/statted
        files given a result pickle.'''
     # load the data
     if debug:
         now = datetime.datetime.now(datetime.UTC).isoformat()
         print(f"{now} - Started reading trace data from {infile.name}", file=sys.stderr)
+
     meta, data = pickle.load(infile)
     if debug:
         now = datetime.datetime.now(datetime.UTC).isoformat()
@@ -282,21 +286,27 @@ def get_files(infile, debug=False):
         now = datetime.datetime.now(datetime.UTC).isoformat()
         print(f"{now} - Finished stat'ed splitting", file=sys.stderr)
 
-    return (meta, source_files, system_files, renamed_files, source_files_statted)
+    return (source_files, system_files, renamed_files, source_files_statted)
 
 @app.command(short_help='Print all opened files')
-@click.option('--pickle', '-p', 'infile', required=True,
-              help='name of pickle file', type=click.File('rb'))
+@click.option('--pickle', '-p', 'pickle_directory', required=True,
+              help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 def print_open_files(infile, debug):
     '''Top level method to print all files that were opened during a build.'''
-    meta, source_files, system_files, renamed_files, source_files_statted = get_files(infile, debug)
+
+    meta_file = pathlib.Path(pickle_directory / 'meta.json')
+    if not meta_file.exists():
+        pass
+
+    meta, source_files, system_files, renamed_files, source_files_statted = get_files(pickle_directory, debug)
 
     if system_files:
         print("System files:")
         for input_file in system_files:
             print(f"- {input_file}")
         print()
+
     if source_files:
         print("Source files:")
         for input_file in source_files:
@@ -454,7 +464,7 @@ def traverse(infile, debug, searchpath):
         except IndexError:
             break
 
-def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug):
+def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, out_directory, debug):
     '''Process a single trace file. Recurse into trace files for dependent processes.'''
     # local information
     children_pids = []
@@ -546,7 +556,7 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
                 # Create a trace process and process trace file for the child process.
                 child_trace_process = tracer.TraceProcess(clone_pid, trace_process.pid)
                 child_tracefile = tracefile.with_suffix(f'.{clone_pid}')
-                process_single_tracefile(child_tracefile, child_trace_process, cwd, children_opened, debug)
+                process_single_tracefile(child_tracefile, child_trace_process, cwd, children_opened, out_directory, debug)
 
             elif syscall == 'close':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
@@ -689,8 +699,9 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, debug
     trace_process.statted_files = statted
     trace_process.command = command
 
-    # store the results in the global RESULTS dict
-    RESULTS[trace_process.pid] = trace_process
+    # write the results to a pickle
+    with open(out_directory / f"{trace_process.pid}.pickle", 'wb') as outfile:
+        pickle.dump(trace_process, outfile)
 
 if __name__ == "__main__":
     app()
