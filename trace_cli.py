@@ -118,9 +118,9 @@ def app():
 @click.option('--tracefiles', '-f', 'tracefiles', required=True,
               help='path to trace files directory', type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
-@click.option('--out', '-o', 'out_directory', required=True,
+@click.option('--out', '-o', 'output_directory', required=True,
               help='name of output directory', type=click.Path(path_type=pathlib.Path))
-def process_trace(basepath, buildid, tracefiles, out_directory, debug):
+def process_trace(basepath, buildid, tracefiles, output_directory, debug):
     '''Top level trace processor'''
     if not basepath.is_absolute():
         raise click.ClickException("--basepath should be an absolute path")
@@ -132,9 +132,17 @@ def process_trace(basepath, buildid, tracefiles, out_directory, debug):
     if buildid.strip() == "":
         raise click.ClickException("build identifier empty")
 
-    # a directory with all the tracefiles
-    if not (out_directory.exists() and out_directory.is_dir()):
-        raise click.ClickException(f"{out_directory} does not exist or is not a directory")
+    # directory where pickles should be written to
+    try:
+        if output_directory.exists():
+            raise click.ClickException(f"{output_directory} already exists")
+    except PermissionError as e:
+        raise click.ClickException(f"Permission error for {output_directory}") from e
+
+    try:
+        output_directory.mkdir()
+    except Exception as e:
+        raise click.ClickException(f"Could not create {output_directory}") from e
 
     # Store the (unique) paths of programs that are used during the build
     # process, typically in execve()
@@ -176,12 +184,12 @@ def process_trace(basepath, buildid, tracefiles, out_directory, debug):
 
     # Process the first tracefile. This will process the other
     # dependent trace files recursively.
-    process_single_tracefile(rootfile, trace_process, cwd, [], out_directory, debug)
+    process_single_tracefile(rootfile, trace_process, cwd, [], output_directory, debug)
 
     # Write meta results to JSON
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': str(basepath)}
 
-    with open(out_directory / "meta.json", 'w') as outfile:
+    with open(output_directory / "meta.json", 'w') as outfile:
         json.dump(meta, outfile, indent=4)
 
     if debug:
@@ -501,7 +509,8 @@ def traverse(infile, debug, searchpath):
         except IndexError:
             break
 
-def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, out_directory, debug):
+def process_single_tracefile(tracefile, trace_process, cwd,
+                             parent_opened, output_directory, debug):
     '''Process a single trace file. Recurse into trace files for dependent processes.'''
     # local information
     children_pids = []
@@ -594,7 +603,7 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, out_d
                 child_trace_process = tracer.TraceProcess(clone_pid, trace_process.pid)
                 child_tracefile = tracefile.with_suffix(f'.{clone_pid}')
                 process_single_tracefile(child_tracefile, child_trace_process, cwd,
-                                         children_opened, out_directory, debug)
+                                         children_opened, output_directory, debug)
 
             elif syscall == 'close':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
@@ -738,7 +747,7 @@ def process_single_tracefile(tracefile, trace_process, cwd, parent_opened, out_d
     trace_process.command = command
 
     # write the results to a pickle
-    with open(out_directory / f"{trace_process.pid}.pickle", 'wb') as outfile:
+    with open(output_directory / f"{trace_process.pid}.pickle", 'wb') as outfile:
         pickle.dump(trace_process, outfile)
 
 if __name__ == "__main__":
