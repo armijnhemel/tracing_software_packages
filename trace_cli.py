@@ -144,17 +144,6 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
     except Exception as e:
         raise click.ClickException(f"Could not create {output_directory}") from e
 
-    # Store the (unique) paths of programs that are used during the build
-    # process, typically in execve()
-    exec_programs = set()
-
-    # Store which processes create other processes
-    parent_to_pid = {}
-
-    # a list of files created or overwritten, so can be ignored
-    # later on for example when copying files.
-    ignore_files = set()
-
     # Find the top level tracefile by looking at the first trace line of
     # every file, extracting the timestamp recorded and keeping track of the
     # earliest timestamp. The file with the earliest timestamp is the root
@@ -162,7 +151,6 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
     # files is complete and the top level trace file is included as well.
     earliest = float('inf')
     for tracefile in tracefiles.glob('**/*'):
-        pid = tracefile.suffix[1:]
         with open(tracefile, 'r') as candidate:
             for line in candidate:
                 timestamp = float(line.split()[0])
@@ -211,7 +199,7 @@ def get_files(pickle_directory, debug=False):
     renamed_to_orig = {}
 
     # load the data, starting with the top level meta file
-    with open(pickle_directory / 'meta.json', 'r') as meta_file:
+    with open(pickle_directory / 'meta.json', 'r', encoding='utf-8') as meta_file:
         meta = json.load(meta_file)
 
     pid_deque = collections.deque()
@@ -722,7 +710,8 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                         original_cwd = pathlib.Path(rename_res.group('cwd'))
                         renamed_name = pathlib.Path(rename_res.group('renamed'))
                         renamed_cwd = pathlib.Path(rename_res.group('cwd2'))
-                    renamed_file = tracer.RenamedFile(timestamp, original_name, original_cwd, renamed_name, renamed_cwd)
+                    renamed_file = tracer.RenamedFile(timestamp, original_name, original_cwd,
+                                                      renamed_name, renamed_cwd)
                     renamed.append(renamed_file)
                 elif debug:
                     print('rename/renameat failed:', line, file=sys.stderr)
