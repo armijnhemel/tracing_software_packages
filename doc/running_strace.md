@@ -22,7 +22,7 @@ The following command will write tracefiles for a subset of system calls, with
 one trace file per process:
 
 ```console
-$ strace -o ../trace/linux-strace -e trace=chdir,getcwd,link,linkat,mkdir,newfstatat,open,openat,rename,renameat2,copy_file_range,sendfile,sendfile64,symlink,symlinkat,unlink,unlinkat,%process,dup,dup2,dup3,close,pipe,pipe2,tee,fchdir -y -Y -qq -ttt -f -ff --seccomp-bpf -s 0 make
+$ strace -o ../trace/linux-strace -e trace=chdir,getcwd,link,linkat,mkdir,newfstatat,open,openat,rename,renameat2,copy_file_range,sendfile,sendfile64,symlink,symlinkat,unlink,unlinkat,%process,dup,dup2,dup3,close,pipe,pipe2,tee,fchdir -y -Y -qq -ttt -f -ff --seccomp-bpf -s 128 make
 ```
 
 This will write the individual trace files to a directory
