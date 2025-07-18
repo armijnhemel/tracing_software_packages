@@ -30,3 +30,7 @@ verify using rebuilds. Because the `make` process will barf if some of these
 files are not found, it means they are needed for the rebuild, even if the
 files themselves are not used at all during the build process (which could
 indicate an inefficiency in the build process).
+
+# Possibly needed?
+
+* `sendmsg` : is this actually used in build systems?
