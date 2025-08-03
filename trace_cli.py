@@ -251,7 +251,7 @@ def get_files(pickle_directory, debug=False):
     return (meta, source_files, system_files, renamed_files, source_files_statted)
 
 @app.command(short_help='Print all opened files')
-@click.option('--pickle', '-p', 'pickle_directory', required=True,
+@click.option('--pickle-dir', '-p', 'pickle_directory', required=True,
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 def print_open_files(pickle_directory, debug):
