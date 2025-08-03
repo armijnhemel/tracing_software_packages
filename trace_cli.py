@@ -24,6 +24,7 @@ import sys
 
 import click
 
+from tracer import syscalls
 from tracer import tracer
 
 
@@ -32,62 +33,6 @@ IGNORE_SYSCALLS = ['wait4', 'exit_group', 'lseek', 'utimensat']
 
 # these directories can (possibly) safely be ignored as inputs or outputs
 IGNORE_DIRECTORIES = ['/dev/', '/proc/', '/sys/']
-
-# regular expression for syscalls
-# result: syscall
-syscall_re = re.compile(r'\d+\.\d+\s+(?P<syscall>[\d\w_]+)\(')
-
-# some precompiled regular expressions for interesting system calls
-# valid filename characters:
-# <>\w\d/\-+,.*$:;
-chdir_re = re.compile(r"chdir\(\"(?P<path>[\w/\-_+,.]+)\"\s*\)\s+=\s+(?P<returncode>\d+)")
-fchdir_re = re.compile(r"fchdir\((?P<fd>\d+)<(?P<path>.*)>\s*\)\s+=\s+(?P<returncode>\d+)")
-
-# open and openat
-# Since glibc 2.26 this always defaults to openat(). This change was introduced
-# sometime in 2017, around Fedora 27 (for reference).
-open_re = re.compile(r"open\(\"([<>\w/\-+,.*$:;]+)\", ([\w|]+)(?:,\s+\d+)?\)\s+= (\-?\d+)<(.*)>$")
-openat_re = re.compile(r"openat\((?P<open_fd>\w+)<(?P<cwd>.*)>, \"(?P<path>[<>\w/\-+,.*$:;]+)\", (?P<flags>[\w|]+)(?:,\s+\d+)?\)\s+=\s+(?P<result_fd>\-?\d+)<(?P<resolved_path>.*)>$")
-
-# close
-close_re = re.compile(r"close\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>\)\s+=\s+(?P<returncode>\d+)")
-
-# getcwd
-getcwd_re = re.compile(r"getcwd\(\"(?P<cwd>[\w/\-+,.]+)\",\s+\d+\)\s+=\s+(?P<fd>\-?\d+)")
-
-# rename and renameat2
-rename_re = re.compile(r"rename\(\"(?P<original>[\w/\-+,.]+)\",\s+\"(?P<renamed>[\w/\-+,.]+)\"\)\s+=\s+(?P<returncode>\d+)")
-renameat2_re = re.compile(r"renameat2\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<original>[\w\d\s\./\-+]+)\",\s+(?P<open_fd2>\w+)<(?P<cwd2>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<renamed>[\w\d\s\./\-+]+)\",\s(?P<flags>\w+)\)\s+=\s+(?P<returncode>\d+)")
-
-# clone
-clone_re = re.compile(r"clone\([\w/\-+,.=]+,\s+(?P<flags>[\w|=]+),\s+[\w=]+?\)\s+=\s+(?P<clone_pid>\-?\d+)<(?P<command>.*)>")
-clone3_re = re.compile(r"clone3\({flags=(?P<flags>[\w_|]+),\s+[\w{}=|,\s<>\[\]]+\)\s+=\s+(?P<clone_pid>\d+)<(?P<command>.*)>")
-
-# vfork
-vfork_re = re.compile(r"vfork\(\s*\)\s*=\s*(?P<clone_pid>\d+)<(?P<command>.*)>")
-
-# execve
-execve_re = re.compile(r"execve\(\"(?P<command>.*)\",\s*\[(?P<args>.*)\],\s+0x\w+\s+/\*\s+\d+\s+vars\s+\*/\)\s*=\s*(?P<returncode>\d+)")
-
-# symlink
-# symlink_re =
-symlinkat_re = re.compile(r"symlinkat\(\"(?P<target>[\w\d\s/\.+\-_,]+)\",\s+(?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<linkpath>[\w\d\s/\.+\-_,]+)\"\)\s+=\s+(?P<returncode>\d+)")
-
-# dup - fd_resolved only needs to be grabbed once as it will always be the same for both fds.
-dup_re = re.compile(r"dup\((?P<old_fd>\d+)<(?P<fd_resolved>[\d\w/\-+_\.:\[\]]+)>\)\s+=\s+(?P<new_fd>\d+)")
-
-# dup2 & dup3
-dup2_re = re.compile(r"dup2\((?P<old_fd>\d+)<(?P<fd_resolved>[\d\w/\-+_\.:\[\]]+)>,\s+(?P<new_fd>\d+)")
-#dup3
-
-# pipe2
-# Example: pipe2([3<pipe:[1714585]>, 4<pipe:[1714585]>], O_CLOEXEC) = 0
-pipe2_re = re.compile(r"pipe2\(\[(?P<read_fd>\d+)<pipe:\[(?P<read_pipe>\d+)\]>,\s+(?P<write_fd>\d+)<pipe:\[(?P<write_pipe>\d+)\]>\],\s+[\w\d]+\)\s+=\s+(?P<returncode>\d+)")
-
-# stat, statx, newfstatat
-newfstatat_re = re.compile(r"newfstatat\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<path>[\w\d\s\./\-+]*)\",\s+{")
-#statx
-
 
 # TODO: remove this code
 #def process_trace_line(line, syscall, pid_to_label):
@@ -109,7 +54,7 @@ def app():
     pass
 
 
-@app.command(short_help='Process strace output and write pickle per trace file')
+@app.command(short_help='Process strace output and write a pickle for each trace file')
 @click.option('--basepath', '-b', 'basepath', required=True,
               help='base path of source director during build',
               type=click.Path(path_type=pathlib.Path))
@@ -508,7 +453,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
     renamed = []
     statted = []
 
-    # Keep state for pipes
+    # Keep state for pipes.
     fd_to_pipes = {}
 
     # Keep state for all opened files.
@@ -526,7 +471,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                 continue
 
             # Grab the name of the system call.
-            syscall_result = syscall_re.match(line)
+            syscall_result = syscalls.syscall_re.match(line)
             if not syscall_result:
                 continue
 
@@ -544,9 +489,9 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                 if not line.rsplit('=', maxsplit=1)[1].strip().startswith('0'):
                     continue
                 if syscall == 'chdir':
-                    chdir_res = chdir_re.search(line)
+                    chdir_res = syscalls.chdir_re.search(line)
                 elif syscall == 'fchdir':
-                    chdir_res = fchdir_re.search(line)
+                    chdir_res = syscalls.fchdir_re.search(line)
                 if chdir_res:
                     chdir_path = pathlib.Path(chdir_res.group('path'))
                     if chdir_path == '.':
@@ -563,11 +508,11 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                     print('chdir/fchdir failed:', line, file=sys.stderr)
             elif syscall in ['clone', 'clone3', 'vfork']:
                 if syscall == 'clone':
-                    cloneres = clone_re.search(line)
+                    cloneres = syscalls.clone_re.search(line)
                 elif syscall == 'clone3':
-                    cloneres = clone3_re.search(line)
+                    cloneres = syscalls.clone3_re.search(line)
                 elif syscall == 'vfork':
-                    cloneres = vfork_re.search(line)
+                    cloneres = syscalls.vfork_re.search(line)
                 if not cloneres:
                     if debug:
                         print('clone/clone3/vfork failed:', line, file=sys.stderr)
@@ -596,7 +541,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
             elif syscall == 'close':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
-                close_res = close_re.search(line)
+                close_res = syscalls.close_re.search(line)
                 if not close_res:
                     if debug:
                         print('close failed:', line, file=sys.stderr)
@@ -608,7 +553,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                 except:
                     pass
             elif syscall == 'dup2':
-                dup2_res = dup2_re.search(line)
+                dup2_res = syscalls.dup2_re.search(line)
                 if not dup2_res:
                     continue
 
@@ -624,13 +569,13 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                 # store the programs that are (successfully) executed
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
-                execveres = execve_re.search(line)
+                execveres = syscalls.execve_re.search(line)
                 if execveres:
                     command = {'command': execveres.group('command'), 'args': execveres.group('args')}
                 elif debug:
                     print('execve failed:', line, file=sys.stderr)
             elif syscall == 'getcwd':
-                getcwd_result = getcwd_re.search(line)
+                getcwd_result = syscalls.getcwd_re.search(line)
                 if getcwd_result:
                     cwd = pathlib.Path(os.path.normpath(getcwd_result.group('cwd')))
                 elif debug:
@@ -638,7 +583,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
             elif syscall == 'newfstatat':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
-                newfstatat_res = newfstatat_re.search(line)
+                newfstatat_res = syscalls.newfstatat_re.search(line)
                 if newfstatat_res:
                     orig_path = pathlib.Path(newfstatat_res.group('cwd')) / newfstatat_res.group('path')
                     fd = newfstatat_res.group('open_fd')
@@ -651,7 +596,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
             elif syscall in ['openat']:
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
-                openres = openat_re.search(line)
+                openres = syscalls.openat_re.search(line)
                 if openres:
                     # Store both the (resolved) original path
                     # and the fully resolved path (related to symbolic links).
@@ -680,7 +625,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                     print('openat failed:', line, file=sys.stderr)
             elif syscall in ['pipe2']:
                 # Correctly processing pipes is tricky.
-                pipe_res = pipe2_re.search(line)
+                pipe_res = syscalls.pipe2_re.search(line)
                 if pipe_res:
                     read_fd = pipe_res.group('read_fd')
                     write_fd = pipe_res.group('write_fd')
@@ -695,9 +640,9 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
                 if syscall == 'rename':
-                    rename_res = rename_re.search(line)
+                    rename_res = syscalls.rename_re.search(line)
                 else:
-                    rename_res = renameat2_re.search(line)
+                    rename_res = syscalls.renameat2_re.search(line)
                 if rename_res:
                     timestamp = float(line.split(' ', maxsplit=1)[0])
                     if syscall == 'rename':
@@ -719,7 +664,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
                 if syscall == 'symlinkat':
-                    symlink_res = symlinkat_re.search(line)
+                    symlink_res = syscalls.symlinkat_re.search(line)
                 if symlink_res:
                     timestamp = float(line.split(' ', maxsplit=1)[0])
                     if syscall == 'symlinkat':
