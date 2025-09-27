@@ -72,4 +72,7 @@ dependency on foo.patch; it only sees that patch reads and recreates bar.c.
 File descriptors to pipes can be passed around from parent processes to child
 processes (or children of child processes, or children of children of child
 processes, etc.). This allows child processes to communicate with parent
-processes. Tracking these properly is a challenge.
+processes. Tracking these properly is a challenge. Specifically, the timestamps
+for reading from and writing to a pipe in different processes aren't reliable:
+when looking just at the timestamps data seems to be read from the pipe in one
+process before it is written in the other process.
