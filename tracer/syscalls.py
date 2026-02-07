@@ -59,4 +59,4 @@ newfstatat_re = re.compile(r"newfstatat\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\
 write_re = re.compile(r"write\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>,\s\"")
 
 # pwrite64 (partial)
-pwrite64_re = re.compile(r"pwrite64\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>,\s\"")
+pwrite64_re = re.compile(r"pwrite64\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>,\s")
