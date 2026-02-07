@@ -21,6 +21,7 @@ following system calls are used (with filtering):
    1904 mkdir
 2599717 newfstatat
 4104591 openat
+  89718 pwrite64
       4 rename
      25 renameat2
       1 symlinkat
@@ -28,6 +29,7 @@ following system calls are used (with filtering):
    2669 unlinkat
    4125 vfork
   37593 wait4
+ 526659 write
 ```
 
 When building the Linux 6.11 kernel without filtering the following system
