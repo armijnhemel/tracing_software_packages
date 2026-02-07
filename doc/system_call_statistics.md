@@ -115,10 +115,10 @@ calls are used:
  526659 write
 ```
 
-When looking at the flags to `openat` it can be seen that there are 18
-combinations of flags used:
+When looking at the flags to `open` and `openat` it can be seen that there are
+18 combinations of flags used:
 
-```
+```console
  1	1182683 ['O_RDONLY']
  2	1019255 ['O_RDONLY', 'O_NOCTTY']
  3	 119755 ['O_RDONLY', 'O_CLOEXEC']
