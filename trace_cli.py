@@ -358,89 +358,19 @@ def copy_files(pickle_directory, source_directory, output_directory, ignore_stat
         shutil.copy(source_file, destination)
 
 
-@app.command(short_help='Process pickle file output')
-@click.option('--pickle', '-p', 'infile', required=True,
-              help='name of pickle file', type=click.File('rb'))
-@click.option('--debug', '-d', is_flag=True, help='print debug information')
+@app.command(short_help='Search a file in the output and report the process ids')
 @click.option('--path', '-f', 'searchpath', type=click.Path(path_type=pathlib.Path),
               help='path to be searched', required=True)
-def traverse(infile, debug, searchpath):
-    # load the data
-    meta, data = pickle.load(infile)
+@click.option('--pickle-dir', '-p', 'pickle_directory', required=True,
+              help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
+@click.option('--debug', '-d', is_flag=True, help='print debug information')
+def search_path(pickle_directory, debug, searchpath):
+    '''Top level method to print all files that were opened during a build.'''
+    meta_file = pathlib.Path(pickle_directory / 'meta.json')
+    if not meta_file.exists():
+        raise click.ClickException(f"{meta_file} does not exist")
 
-    resolved_searchpath = meta['basepath'] / searchpath
-
-    # The most interesting data is opened files.
-    # These files can be divided into a few categories:
-    #
-    # 1. files that are only read (input)
-    # 2. files that are only written (output)
-    # 3. files that are read and written (input and output)
-    #
-    # Files in the first category can contain source code files
-    # (interesting), but also dependencies of programs that are
-    # run (perhaps less interesting).
-    #
-    # Files in the second category are temporary files, or
-    # build artifacts (interesting)
-    #
-    # Files in the third category are most likely temporary
-    # files.
-
-    inputs_per_pid = {}
-    outputs_per_pid = {}
-    pids_per_input = {}
-    pids_per_output = {}
-
-    # store inputs and outputs per pid
-    # and vice versa
-    for pid in data:
-        for opened_file in data[pid].opened_files:
-            if opened_file.is_directory:
-                # directories can be safely skipped
-                continue
-            if opened_file.is_read:
-                if pid not in inputs_per_pid:
-                    inputs_per_pid[pid] = []
-                inputs_per_pid[pid].append(opened_file)
-                if opened_file.resolved_path not in pids_per_input:
-                    pids_per_input[opened_file.resolved_path] = []
-                pids_per_input[opened_file.resolved_path].append((pid, opened_file.timestamp))
-            if opened_file.is_written:
-                if pid not in outputs_per_pid:
-                    outputs_per_pid[pid] = []
-                outputs_per_pid[pid].append(opened_file)
-                if opened_file.resolved_path not in pids_per_output:
-                    pids_per_output[opened_file.resolved_path] = []
-                pids_per_output[opened_file.resolved_path].append((pid, opened_file.timestamp))
-
-    if resolved_searchpath not in pids_per_output:
-        print(f"Path {searchpath} could not be found as an output, exiting...", file=sys.stderr)
-        sys.exit(1)
-
-    # in case there are multiple processes creating a file
-    # pick the latest one.
-    latest = float(0)
-    latest_pid = None
-    for pid, timestamp in pids_per_output[resolved_searchpath]:
-        if timestamp > latest:
-            latest = timestamp
-            latest_pid = pid
-
-    inputs_per_output = set()
-
-    # recursively walk inputs/outputs
-    pid_deque = collections.deque()
-    pid_deque.append(latest_pid)
-
-    while True:
-        try:
-            pid = pid_deque.popleft()
-            for i in inputs_per_pid[pid]:
-                print(i.resolved_path)
-            #print(pid, inputs_per_pid[pid])
-        except IndexError:
-            break
+    meta, source_files, system_files, renamed_files, source_files_statted = get_files(pickle_directory, debug)
 
 def process_single_tracefile(tracefile, trace_process, cwd,
                              parent_opened, output_directory, debug):
