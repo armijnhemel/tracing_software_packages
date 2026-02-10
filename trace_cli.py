@@ -379,9 +379,13 @@ def process_single_tracefile(tracefile, trace_process, cwd,
     children_pids = []
     command = None
     closed = set()
+
+    # Store if files were (successfully) opened, renamed, statted or written/created.
+    # These collections could overlap.
     opened = []
     renamed = []
     statted = []
+    written = set()
 
     # Keep state for pipes.
     fd_to_pipes = {}
@@ -602,12 +606,31 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                         linkpath = pathlib.Path(symlink_res.group('linkpath'))
                 elif debug:
                     print('symlinkat failed:', line, file=sys.stderr)
+            elif syscall in ['write', 'pwrite64']:
+                if syscall == 'write':
+                    write_res = syscalls.write_re.search(line)
+                else:
+                    write_res = syscalls.pwrite64_re.search(line)
+                if write_res:
+                    # extra sanity check to see if data was written
+                    try:
+                        num_bytes = int(line.strip().rsplit('=')[-1])
+                    except:
+                        continue
+                    # store the path of the file that was written to, except
+                    # if it is a pipe
+                    write_path = write_res.group('path')
+                    if not write_path.startswith('pipe:['):
+                        written.add(write_path)
+                elif debug:
+                    print('write/pwrite64 failed:', line, file=sys.stderr)
 
     # store the results for the trace process
     trace_process.children = children_pids
     trace_process.opened_files = opened
     trace_process.renamed_files = renamed
     trace_process.statted_files = statted
+    trace_process.written_files = sorted(written)
     trace_process.command = command
 
     # write the results to a pickle
