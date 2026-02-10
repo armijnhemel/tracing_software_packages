@@ -10,42 +10,52 @@ class OpenedFile:
 
     @property
     def cwd(self):
+        '''Return the current working directory'''
         return self._cwd
 
     @property
     def fd(self):
+        '''Return the file descriptor of the opened file'''
         return self._fd
 
     @fd.setter
     def fd(self, fd):
+        '''Set the file descriptor of the opened file'''
         self._fd = fd
 
     @property
     def flags(self):
+        '''Return the flags used for open() or openat()'''
         return self._flags
 
     @property
     def original_path(self):
+        '''Return the original path as used in open() or openat()'''
         return self._original_path
 
     @property
     def resolved_path(self):
+        '''Return the resolved, cleaned up, path used in open() or openat()'''
         return self._resolved_path
 
     @property
     def timestamp(self):
+        '''Return the timestamp of the open() or openat() call'''
         return self._timestamp
 
     @property
     def is_directory(self):
-        return True if 'O_DIRECTORY' in self.flags else False
+        '''Return if the path is opened as a directory'''
+        return 'O_DIRECTORY' in self.flags
 
     @property
     def is_created(self):
-        return True if 'O_CREAT' in self.flags else False
+        '''Return if the path is created (opened with O_CREAT)'''
+        return 'O_CREAT' in self.flags
 
     @property
     def is_read(self):
+        '''Return if the path is read (opened with read flags)'''
         is_read = False
         if 'O_RDONLY' in self.flags or 'O_RDWR' in self.flags:
             is_read = True
@@ -53,14 +63,17 @@ class OpenedFile:
 
     @property
     def is_read_only(self):
-        return True if 'O_RDONLY' in self.flags else False
+        '''Return if the path is opened as read only'''
+        return 'O_RDONLY' in self.flags
 
     @property
     def is_truncated(self):
-        return True if 'O_TRUNC' in self.flags else False
+        '''Return if the file is truncated (in combination with writing)'''
+        return 'O_TRUNC' in self.flags
 
     @property
     def is_written(self):
+        '''Return if the path is written to (opened with write flags)'''
         is_write = False
         if 'O_WRONLY' in self.flags or 'O_RDWR' in self.flags:
             is_write = True
@@ -77,22 +90,27 @@ class RenamedFile:
 
     @property
     def timestamp(self):
+        '''Return the timestamp of the rename() or renameat2() call'''
         return self._timestamp
 
     @property
     def original_name(self):
+        '''Return the original name of the file'''
         return self._original_name
 
     @property
     def original_cwd(self):
+        '''Return the original current working directory of the file'''
         return self._original_cwd
 
     @property
     def renamed_name(self):
+        '''Return the renamed name of the file'''
         return self._renamed_name
 
     @property
     def renamed_cwd(self):
+        '''Return the renamed current working directory of the file'''
         return self._renamed_cwd
 
 
@@ -106,26 +124,32 @@ class StatFile:
 
     @property
     def cwd(self):
+        '''Return the current working directory'''
         return self._cwd
 
     @property
     def fd(self):
+        '''Return the file descriptor of the opened file'''
         return self._fd
 
     @fd.setter
     def fd(self, fd):
+        '''Set the file descriptor of the opened file'''
         self._fd = fd
 
     @property
     def original_path(self):
+        '''Return the original path as used in stat() or newfstatat()'''
         return self._original_path
 
     @property
     def resolved_path(self):
+        '''Return the resolved, cleaned up, path used in stat() or newfstatat()'''
         return self._resolved_path
 
     @property
     def timestamp(self):
+        '''Return the timestamp of the stat() or newfstatat() call'''
         return self._timestamp
 
 
@@ -157,10 +181,12 @@ class TraceProcess:
 
     @property
     def parent_pid(self):
+        '''Return the process id of the parent process'''
         return self._parent_pid
 
     @property
     def pid(self):
+        '''Return the process id of this process'''
         return self._pid
 
     @property
