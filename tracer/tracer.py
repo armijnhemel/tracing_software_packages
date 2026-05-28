@@ -176,6 +176,12 @@ class TraceProcess:
         self._statted_files = []
         self._children = []
 
+        # Files that were read by this process (entire lifetime)
+        self._read_files = []
+
+        # Files that were read by this process (entire lifetime)
+        self._write_files = []
+
         # The shell command associated with the process
         self._command = None
 
@@ -214,6 +220,13 @@ class TraceProcess:
         self._opened_files = opened_files
 
     @property
+    def read_files(self):
+        return self._read_files
+
+    @read_files.setter
+    def read_files(self, read_files):
+        self._read_files = read_files
+    @property
     def renamed_files(self):
         return self._renamed_files
 
@@ -228,3 +241,11 @@ class TraceProcess:
     @statted_files.setter
     def statted_files(self, statted_files):
         self._statted_files = statted_files
+
+    @property
+    def written_files(self):
+        return self._written_files
+
+    @written_files.setter
+    def written_files(self, written_files):
+        self._written_files = written_files
