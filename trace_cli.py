@@ -9,7 +9,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 #
-# Copyright 2017-2025 - Armijn Hemel
+# Copyright 2017-2026 - Armijn Hemel
 
 import collections
 import copy
@@ -95,14 +95,17 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
     # of the trace. Of course this will only work if the collection of trace
     # files is complete and the top level trace file is included as well.
     earliest = float('inf')
-    for tracefile in tracefiles.glob('**/*'):
-        with open(tracefile, 'r') as candidate:
-            for line in candidate:
-                timestamp = float(line.split()[0])
-                if timestamp < earliest:
-                    rootfile = tracefile
-                    earliest = timestamp
-                break
+    for trace_walk in tracefiles.walk():
+        directory, _, files = trace_walk
+        for f in files:
+            tracefile = directory / f
+            with open(tracefile, 'r') as candidate:
+                for line in candidate:
+                    timestamp = float(line.split()[0])
+                    if timestamp < earliest:
+                        rootfile = tracefile
+                        earliest = timestamp
+                    break
 
     default_pid = rootfile.suffix[1:]
 
