@@ -15,8 +15,8 @@ This project has a few goals:
 
 There are two separate steps:
 
-1. tracing the build using `strace`, see [running strace](doc/running_strace.md)
-2. processing the trace file
+1. tracing a build using `strace`, see [running strace](doc/running_strace.md)
+2. processing the trace file from step 1.
 
 ## Funding
 

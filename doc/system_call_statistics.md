@@ -1,6 +1,6 @@
 # System call statistics
 
-## Trace statistics
+## Linux kernel 6.11 on Fedora 39
 
 When building the Linux 6.11 kernel with the configuration file found in
 [`data/kernel-6.11.config`](../data/kernel-6.11.config) on a recent Fedora 39 the
@@ -21,6 +21,7 @@ following system calls are used (with filtering):
    1904 mkdir
 2599717 newfstatat
 4104591 openat
+  89718 pwrite64
       4 rename
      25 renameat2
       1 symlinkat
@@ -28,6 +29,7 @@ following system calls are used (with filtering):
    2669 unlinkat
    4125 vfork
   37593 wait4
+ 526659 write
 ```
 
 When building the Linux 6.11 kernel without filtering the following system
@@ -114,6 +116,32 @@ calls are used:
   37593 wait4
  526659 write
 ```
+
+When looking at the flags to `open` and `openat` it can be seen that there are
+18 combinations of flags used:
+
+```console
+ 1	1182683 ['O_RDONLY']
+ 2	1019255 ['O_RDONLY', 'O_NOCTTY']
+ 3	 119755 ['O_RDONLY', 'O_CLOEXEC']
+ 4	   8045 ['O_WRONLY', 'O_CREAT', 'O_TRUNC']
+ 5	   4621 ['O_RDWR', 'O_NONBLOCK']
+ 6	   4494 ['O_RDONLY', 'O_NONBLOCK', 'O_CLOEXEC', 'O_DIRECTORY']
+ 7	   2577 ['O_RDWR', 'O_CREAT', 'O_TRUNC']
+ 8	   2272 ['O_RDWR', 'O_CREAT', 'O_EXCL']
+ 9	   1816 ['O_WRONLY', 'O_CREAT', 'O_APPEND']
+10	   1800 ['O_RDWR']
+11	    166 ['O_WRONLY', 'O_TRUNC']
+12	    142 ['O_RDONLY', 'O_NOCTTY', 'O_NONBLOCK', 'O_NOFOLLOW', 'O_CLOEXEC', 'O_DIRECTORY']
+13	      6 ['O_RDONLY', 'O_NOCTTY', 'O_NONBLOCK', 'O_NOFOLLOW', 'O_DIRECTORY']
+14	      5 ['O_WRONLY', 'O_CREAT', 'O_EXCL']
+15	      5 ['O_RDONLY', 'O_PATH', 'O_DIRECTORY']
+16	      3 ['O_WRONLY', 'O_CREAT', 'O_NOCTTY', 'O_NONBLOCK']
+17	      1 ['O_WRONLY', 'O_CREAT', 'O_TRUNC', 'O_CLOEXEC']
+18	      1 ['O_WRONLY', 'O_CREAT', 'O_NONBLOCK']
+```
+
+## BusyBox 1.37 on Fedora 39
 
 When building BusyBox 1.37 with the configuration found in
 [`data/busybox-1.37.0.config`](../data/busybox-1.37.0.config) on a recent
