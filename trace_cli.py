@@ -388,6 +388,8 @@ def process_single_tracefile(tracefile, trace_process, cwd,
     opened = []
     renamed = []
     statted = []
+
+    read = set()
     written = set()
 
     # Keep state for pipes.
@@ -561,7 +563,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                 elif debug:
                     print('openat failed:', line, file=sys.stderr)
             elif syscall in ['pipe2']:
-                # Correctly processing pipes is tricky.
+                # Extract file descriptor numbers and pipe number
                 pipe_res = syscalls.pipe2_re.search(line)
                 if pipe_res:
                     read_fd = pipe_res.group('read_fd')
@@ -570,6 +572,20 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                         open_fds[read_fd] = copy.deepcopy(open_fds[write_fd])
                 elif debug:
                     print('pipe2 failed:', line, file=sys.stderr)
+            elif syscall in ['read', 'pread64']:
+                if syscall == 'read':
+                    read_res = syscalls.read_re.search(line)
+                elif syscall == 'pread64':
+                    read_res = syscalls.pread64_re.search(line)
+
+                if read_res:
+                    # store the path of the file that was read from, except
+                    # if it is a pipe
+                    read_path = read_res.group('path')
+                    if not read_path.startswith('pipe:['):
+                        read.add(read_path)
+                elif debug:
+                    print('read/pread64 failed:', line, file=sys.stderr)
             elif syscall in ['rename', 'renameat2']:
                 # renaming is important to track.
                 # Example: in the Linux kernel the file include/config/auto.conf
@@ -633,6 +649,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
     trace_process.opened_files = opened
     trace_process.renamed_files = renamed
     trace_process.statted_files = statted
+    trace_process.read_files = sorted(read)
     trace_process.written_files = sorted(written)
     trace_process.command = command
 
