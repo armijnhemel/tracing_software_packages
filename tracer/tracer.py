@@ -143,11 +143,6 @@ class StatFile:
         return self._original_path
 
     @property
-    def resolved_path(self):
-        '''Return the resolved, cleaned up, path used in stat() or newfstatat()'''
-        return self._resolved_path
-
-    @property
     def timestamp(self):
         '''Return the timestamp of the stat() or newfstatat() call'''
         return self._timestamp
