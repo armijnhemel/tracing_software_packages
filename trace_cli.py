@@ -4,7 +4,7 @@
 #
 # Background information:
 #
-# * http://www.st.ewi.tudelft.nl/~sander/pdf/publications/TUD-SERG-2012-010.pdf
+# * https://web.archive.org/web/20130429174246/https://st.ewi.tudelft.nl/~sander/pdf/publications/TUD-SERG-2012-010.pdf
 # * http://rebels.ece.mcgill.ca/confpaper/2014/09/14/tracing-software-build-processes-to-uncover-license-compliance-inconsistencies.html
 #
 # SPDX-License-Identifier: Apache-2.0
