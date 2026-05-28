@@ -60,3 +60,7 @@ write_re = re.compile(r"write\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>,\s\"")
 
 # pwrite64 (partial)
 pwrite64_re = re.compile(r"pwrite64\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>,\s")
+
+# read
+read_re = re.compile(r"read\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>,\s")
+pread64_re = re.compile(r"pread64\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>,\s")
