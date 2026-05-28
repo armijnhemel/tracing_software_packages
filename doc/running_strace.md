@@ -1,5 +1,8 @@
 # Running strace
 
+The first step is to obtain trace data using `strace`. This is fairly
+straightforward, but there are some twists that need to be kept in mind.
+
 Let's take the Linux kernel as an example. First trace a Linux kernel build
 with (for example) the following command, but make sure there is enough disk
 space available, as trace files for the Linux kernel tend to get really big.
@@ -26,7 +29,22 @@ $ strace -o ../trace/linux-strace -e trace=chdir,getcwd,link,linkat,mkdir,newfst
 ```
 
 This will write the individual trace files to a directory
-(`../trace/linux-strace`) which can then be processed.
+(`../trace/linux-strace`) which can then be processed by the other scripts in
+this repository.
+
+## Statistics
+
+Tracing a build of the Linux kernel creates many files, and the trace files
+take quite a bit of space as well:
+
+```console
+$ cd ../trace/linux-strace
+$ ls | wc -l
+24795
+$ du -h
+1.4G	.
+```
+## Syscalls
 
 Compared to a "full" invocation this leaves out the following syscalls from
 `%file`:
@@ -52,17 +70,3 @@ TODO: There are probably more calls that need to be added
 TODO: what to do with writes to files? There are sometimes zero sized files
 that are merely touched, but no content is written to them. Should write
 calls such as `write()` also be tracked?
-
-
-## Statistics
-
-Tracing a build of the Linux kernel creates many files, and the trace files
-take quite a bit of space as well:
-
-```console
-$ cd ../trace/linux-strace
-$ ls | wc -l
-24795
-$ du -h
-1.4G	.
-```
