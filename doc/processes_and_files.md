@@ -51,8 +51,8 @@ B ---> |    |
        +----+
 ```
 
-Because B wasn't opened yet when X was written, it cannot be an input, but for
-Y it cannot be excluded that A is an input.
+Because `B` wasn't opened yet when `X` was written, it cannot be an input, but
+for `Y` it cannot be excluded that `A` is an input.
 
 To be even more accurate there could be checks to see if data was actually read
 from the inputs or written to the outputs, by looking at `read`, `write`,
