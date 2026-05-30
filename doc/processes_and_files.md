@@ -75,4 +75,5 @@ processes, etc.). This allows child processes to communicate with parent
 processes. Tracking these properly is a challenge. Specifically, the timestamps
 for reading from and writing to a pipe in different processes aren't reliable:
 when looking just at the timestamps data seems to be read from the pipe in one
-process before it is written in the other process.
+process before it is written in the other process. This happens when the read
+is done in blocking mode.
