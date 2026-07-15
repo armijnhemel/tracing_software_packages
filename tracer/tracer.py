@@ -150,7 +150,13 @@ class StatFile:
 
 class TraceProcess:
     '''Helper class to store information about a single process.
-       At the end of trace processing this object should contain
+       When inherited by a child process it represents a snapshot
+       of the data at that exact moment. Data added later will not
+       be propagated to child processes. For example, if a file has
+       been opened after a child process was created, then the file
+       will not be updated in the child process.
+
+       At the end of the process' liftime this object should contain
        the entire state of the process.'''
     def __init__(self, pid, parent_pid):
         '''Initialization method for the class, sets several
