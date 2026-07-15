@@ -186,6 +186,14 @@ class TraceProcess:
         # The shell command associated with the process
         self._command = None
 
+        # Mapping of file descriptors to pipes
+        # This can change and be updated during the lifetime of the process
+        self._fds_to_pipe = {}
+
+        # Mapping of pipes to file descriptors (read/write)
+        # This can change and be updated during the lifetime of the process
+        self._pipe_to_fds = {}
+
     @property
     def parent_pid(self):
         '''Return the process id of the parent process'''
@@ -227,6 +235,7 @@ class TraceProcess:
     @read_files.setter
     def read_files(self, read_files):
         self._read_files = read_files
+
     @property
     def renamed_files(self):
         return self._renamed_files
@@ -250,3 +259,19 @@ class TraceProcess:
     @written_files.setter
     def written_files(self, written_files):
         self._written_files = written_files
+
+    @property
+    def fds_to_pipe(self):
+        return self._fds_to_pipe
+
+    @fds_to_pipe.setter
+    def fds_to_pipe(self):
+        return self._fds_to_pipe
+
+    @property
+    def pipe_to_fds(self):
+        return self._pipe_to_fds
+
+    @pipe_to_fds.setter
+    def pipe_to_ds(self):
+        return self._pipe_to_fds
