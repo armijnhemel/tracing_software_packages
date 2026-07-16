@@ -167,15 +167,19 @@ class TraceProcess:
         # The original PID
         self._pid = pid
 
+        # child PIDs of all child processes created and launched
+        self._children = []
+
         # Files that were opened by this process (entire lifetime)
+        # These are the full names of the files, without any associated
+        # file descriptor numbers, as those aren't relevant at the end.
         self._opened_files = []
 
         # Files that were renamed by this process (entire lifetime)
         self._renamed_files = []
 
-        # Files that were renamed by this process (entire lifetime)
+        # Files that were statted by this process (entire lifetime)
         self._statted_files = []
-        self._children = []
 
         # Files that were read by this process (entire lifetime)
         self._read_files = []
