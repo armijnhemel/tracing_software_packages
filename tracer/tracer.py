@@ -157,7 +157,11 @@ class TraceProcess:
        will not be updated in the child process.
 
        At the end of the process' liftime this object should contain
-       the entire state of the process.'''
+       the entire state of the process.
+
+       Typically the data structures in this object are set once, or
+       updated with new data, but data is not deleted from fields,
+       except for the 'stateful' fields (which are indicated).'''
     def __init__(self, pid, parent_pid):
         '''Initialization method for the class, sets several
            variables to default values.'''
@@ -190,13 +194,18 @@ class TraceProcess:
         # The shell command associated with the process
         self._command = None
 
+        # 'stateful' fields:
+        # * fds_to_pipe
+        # * pipe_to_fds
+        # * open_fds
+
         # Mapping of file descriptors to pipes
-        # This can change and be updated during the lifetime of the process
         self._fds_to_pipe = {}
 
         # Mapping of pipes to file descriptors (read/write)
-        # This can change and be updated during the lifetime of the process
         self._pipe_to_fds = {}
+
+        self.open_fds = {}
 
     @property
     def parent_pid(self):
@@ -279,3 +288,11 @@ class TraceProcess:
     @pipe_to_fds.setter
     def pipe_to_fds(self, pipe_to_fds):
         self._pipe_to_fds = pipe_to_fds
+
+    @property
+    def open_fds(self):
+        return self._open_fds
+
+    @open_fds.setter
+    def open_fds(self, open_fds):
+        self._open_fds = open_fds
