@@ -5,7 +5,7 @@
 # Background information:
 #
 # * https://web.archive.org/web/20130429174246/https://st.ewi.tudelft.nl/~sander/pdf/publications/TUD-SERG-2012-010.pdf
-# * http://rebels.ece.mcgill.ca/confpaper/2014/09/14/tracing-software-build-processes-to-uncover-license-compliance-inconsistencies.html
+# * https://rebels.cs.uwaterloo.ca/confpaper/2014/09/14/tracing-software-build-processes-to-uncover-license-compliance-inconsistencies.html
 #
 # SPDX-License-Identifier: Apache-2.0
 #
@@ -18,7 +18,6 @@ import json
 import os
 import pathlib
 import pickle
-import re
 import shutil
 import sys
 
@@ -109,20 +108,22 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
 
     default_pid = rootfile.suffix[1:]
 
+    # set the parent PID to an empty value, as there
+    # is no parent PID for the first process.
+    parent_pid = ''
+
     if debug:
         print("ROOT PID", default_pid, file=sys.stderr)
 
+    # set the first "current working directory"
     cwd = ''
-
-    # Create the trace process object and associate the
-    # PID and a fictional parent with it.
-    trace_process = tracer.TraceProcess(default_pid, 'root')
 
     # Process the first tracefile. This will process the other
     # dependent trace files recursively.
-    process_single_tracefile(rootfile, trace_process, cwd, [], output_directory, debug)
+    opened_files = []
+    single_tracefile(rootfile, default_pid, parent_pid, cwd, opened_files, output_directory, debug)
 
-    # Write meta results to JSON
+    # Finally write meta results to JSON
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': str(basepath)}
 
     with open(output_directory / "meta.json", 'w') as outfile:
@@ -375,9 +376,16 @@ def search_path(pickle_directory, debug, searchpath):
 
     meta, source_files, system_files, renamed_files, source_files_statted = get_files(pickle_directory, debug)
 
-def process_single_tracefile(tracefile, trace_process, cwd,
-                             parent_opened, output_directory, debug):
-    '''Process a single trace file. Recurse into trace files for dependent processes.'''
+def single_tracefile(tracefile_root, pid, parent_pid, cwd, parent_opened, output_directory, debug):
+    '''Process a single trace file. Recurse into trace files of child processes.'''
+    # Create the trace process object and associate the
+    # PID and a fictional parent with it.
+    if parent_pid == '':
+        parent_pid = 'root'
+
+    trace_process = tracer.TraceProcess(pid, parent_pid)
+    tracefile = tracefile_root.with_suffix(f'.{pid}')
+
     # local information
     children_pids = []
     command = None
@@ -392,8 +400,9 @@ def process_single_tracefile(tracefile, trace_process, cwd,
     read = set()
     written = set()
 
-    # Keep state for pipes.
-    fd_to_pipes = {}
+    # Keep bidirectional state for pipes for a single process
+    fds_to_pipe = {}
+    pipe_to_fds = {}
 
     # Keep state for all opened files.
     open_fds = {}
@@ -402,6 +411,8 @@ def process_single_tracefile(tracefile, trace_process, cwd,
     # files inherited from the parent process.
     for opened_file in parent_opened:
         open_fds[opened_file.fd] = opened_file
+
+    # Copy any pipe information from the parent process
 
     with open(tracefile, 'r') as file_to_process:
         for line in file_to_process:
@@ -472,9 +483,7 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                 children_opened = open_fds.values()
 
                 # Create a trace process and process trace file for the child process.
-                child_trace_process = tracer.TraceProcess(clone_pid, trace_process.pid)
-                child_tracefile = tracefile.with_suffix(f'.{clone_pid}')
-                process_single_tracefile(child_tracefile, child_trace_process, cwd,
+                single_tracefile(tracefile_root, clone_pid, pid, cwd,
                                          children_opened, output_directory, debug)
 
             elif syscall == 'close':
@@ -491,6 +500,13 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                     del open_fds[fd]
                 except:
                     pass
+
+                if 'pipe:[' in close_res.group('path'):
+                    # Remove any file descriptors associated with pipes.
+                    try:
+                        del fds_to_pipe[fd]
+                    except Exception as e:
+                        pass
             elif syscall == 'dup2':
                 dup2_res = syscalls.dup2_re.search(line)
                 if not dup2_res:
@@ -564,10 +580,16 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                     print('openat failed:', line, file=sys.stderr)
             elif syscall in ['pipe2']:
                 # Extract file descriptor numbers and pipe number
+                # man 7 pipe
                 pipe_res = syscalls.pipe2_re.search(line)
                 if pipe_res:
                     read_fd = pipe_res.group('read_fd')
                     write_fd = pipe_res.group('write_fd')
+                    read_pipe = pipe_res.group('read_pipe')
+                    write_pipe = pipe_res.group('write_pipe')
+                    fds_to_pipe[read_fd] = read_pipe
+                    fds_to_pipe[write_fd] = read_pipe
+                    pipe_to_fds[read_pipe] = {'read': read_fd, 'write': write_fd}
                     if write_fd in open_fds:
                         open_fds[read_fd] = copy.deepcopy(open_fds[write_fd])
                 elif debug:
@@ -584,6 +606,9 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                     read_path = read_res.group('path')
                     if not read_path.startswith('pipe:['):
                         read.add(read_path)
+                    else:
+                        # fd related to the pipe is an input
+                        pass
                 elif debug:
                     print('read/pread64 failed:', line, file=sys.stderr)
             elif syscall in ['rename', 'renameat2']:
@@ -641,6 +666,9 @@ def process_single_tracefile(tracefile, trace_process, cwd,
                     write_path = write_res.group('path')
                     if not write_path.startswith('pipe:['):
                         written.add(write_path)
+                    else:
+                        # fd related to the pipe is an output
+                        pass
                 elif debug:
                     print('write/pwrite64 failed:', line, file=sys.stderr)
 
@@ -649,6 +677,8 @@ def process_single_tracefile(tracefile, trace_process, cwd,
     trace_process.opened_files = opened
     trace_process.renamed_files = renamed
     trace_process.statted_files = statted
+    trace_process.fds_to_pipe = fds_to_pipe
+    trace_process.pipe_to_fds = pipe_to_fds
     trace_process.read_files = sorted(read)
     trace_process.written_files = sorted(written)
     trace_process.command = command
