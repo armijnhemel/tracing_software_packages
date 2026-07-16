@@ -108,9 +108,9 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
 
     default_pid = rootfile.suffix[1:]
 
-    # set the parent PID to an empty value, as there
-    # is no parent PID for the first process.
-    parent_pid = ''
+    # set the parent to an empty value, as there
+    # is no parent for the first process.
+    parent = None
 
     if debug:
         print("ROOT PID", default_pid, file=sys.stderr)
@@ -120,8 +120,7 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
 
     # Process the first tracefile. This will process the other
     # dependent trace files recursively.
-    opened_files = []
-    single_tracefile(rootfile, default_pid, parent_pid, cwd, opened_files, output_directory, debug)
+    single_tracefile(rootfile, default_pid, parent, cwd, output_directory, debug)
 
     # Finally write meta results to JSON
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': str(basepath)}
@@ -376,20 +375,22 @@ def search_path(pickle_directory, debug, searchpath):
 
     meta, source_files, system_files, renamed_files, source_files_statted = get_files(pickle_directory, debug)
 
-def single_tracefile(tracefile_root, pid, parent_pid, cwd, parent_opened, output_directory, debug):
+def single_tracefile(tracefile_root, pid, parent, cwd, output_directory, debug):
     '''Process a single trace file. Recurse into trace files of child processes.'''
     # Create the trace process object and associate the
     # PID and a fictional parent with it.
-    if parent_pid == '':
+    if not parent == '':
         parent_pid = 'root'
+    else:
+        parent_pid = parent.pid
 
+    # create the TraceProcess object for the process
     trace_process = tracer.TraceProcess(pid, parent_pid)
     tracefile = tracefile_root.with_suffix(f'.{pid}')
 
     # local information
     children_pids = []
     command = None
-    closed = set()
 
     # Store if files were (successfully) opened, renamed, statted or written/created.
     # These collections could overlap.
@@ -397,6 +398,7 @@ def single_tracefile(tracefile_root, pid, parent_pid, cwd, parent_opened, output
     renamed = []
     statted = []
 
+    closed = set()
     read = set()
     written = set()
 
@@ -404,13 +406,15 @@ def single_tracefile(tracefile_root, pid, parent_pid, cwd, parent_opened, output
     fds_to_pipe = {}
     pipe_to_fds = {}
 
-    # Keep state for all opened files.
+    # Keep state for all opened files. This is stored as part
+    # of the process and updated every time the process is updated.
     open_fds = {}
 
     # Store the file descriptors for all opened
     # files inherited from the parent process.
-    for opened_file in parent_opened:
-        open_fds[opened_file.fd] = opened_file
+    if parent:
+        for opened_file in parent.open_fds:
+            open_fds[opened_file.fd] = copy.copy(opened_file)
 
     # Copy any pipe information from the parent process
 
@@ -478,13 +482,9 @@ def single_tracefile(tracefile_root, pid, parent_pid, cwd, parent_opened, output
                 # Add the child PID to the children PIDs for the process.
                 children_pids.append(clone_pid)
 
-                # Cloned/forked processes inherit some information of the parent
-                # process such as the current cwd as well as currently opened files.
-                children_opened = open_fds.values()
-
                 # Create a trace process and process trace file for the child process.
-                single_tracefile(tracefile_root, clone_pid, pid, cwd,
-                                         children_opened, output_directory, debug)
+                single_tracefile(tracefile_root, clone_pid, trace_process, cwd,
+                                         output_directory, debug)
 
             elif syscall == 'close':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
@@ -507,6 +507,7 @@ def single_tracefile(tracefile_root, pid, parent_pid, cwd, parent_opened, output
                         del fds_to_pipe[fd]
                     except Exception as e:
                         pass
+                trace_process.open_fds = list(open_fds.values())
             elif syscall == 'dup2':
                 dup2_res = syscalls.dup2_re.search(line)
                 if not dup2_res:
@@ -520,6 +521,7 @@ def single_tracefile(tracefile_root, pid, parent_pid, cwd, parent_opened, output
                     new_file = copy.deepcopy(open_fds[old_fd])
                     new_file.fd = new_fd
                     open_fds[new_fd] = new_file
+                trace_process.open_fds = list(open_fds.values())
             elif syscall == 'execve':
                 # store the programs that are (successfully) executed
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
@@ -576,6 +578,7 @@ def single_tracefile(tracefile_root, pid, parent_pid, cwd, parent_opened, output
                         opened_file = tracer.OpenedFile(pathlib.Path(openres.group('cwd')), flags, orig_path, resolved_path, fd, timestamp)
                         opened.append(opened_file)
                         open_fds[fd] = opened_file
+                    trace_process.open_fds = list(open_fds.values())
                 elif debug:
                     print('openat failed:', line, file=sys.stderr)
             elif syscall in ['pipe2']:
@@ -592,6 +595,7 @@ def single_tracefile(tracefile_root, pid, parent_pid, cwd, parent_opened, output
                     pipe_to_fds[read_pipe] = {'read': read_fd, 'write': write_fd}
                     if write_fd in open_fds:
                         open_fds[read_fd] = copy.deepcopy(open_fds[write_fd])
+                    trace_process.open_fds = list(open_fds.values())
                 elif debug:
                     print('pipe2 failed:', line, file=sys.stderr)
             elif syscall in ['read', 'pread64']:
