@@ -269,13 +269,13 @@ class TraceProcess:
         return self._fds_to_pipe
 
     @fds_to_pipe.setter
-    def fds_to_pipe(self):
-        return self._fds_to_pipe
+    def fds_to_pipe(self, fds_to_pipe):
+        self._fds_to_pipe = fds_to_pipe
 
     @property
     def pipe_to_fds(self):
         return self._pipe_to_fds
 
     @pipe_to_fds.setter
-    def pipe_to_ds(self):
-        return self._pipe_to_fds
+    def pipe_to_fds(self, pipe_to_fds):
+        self._pipe_to_fds = pipe_to_fds
