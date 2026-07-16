@@ -32,7 +32,7 @@ makes the information even more granular.
 
 There are a few caveats: when parsing trace files and keeping state it is
 important to realise that the order in which files are opened is important,
-but state doesn't say anything. A file that has been opened, read and closed
+but state doesn't say everything. A file that has been opened, read and closed
 obviously cannot be an input for a file that has already been written and
 closed, but it could be used as an input for a file that is written later,
 even if the input was already closed (because contents were read into memory).
@@ -52,13 +52,20 @@ B ---> |    |
 ```
 
 Because `B` wasn't opened yet when `X` was written, it cannot be an input, but
-for `Y` it cannot be excluded that `A` is an input.
+for `Y` it cannot be excluded that `A` is an input, as data read from `A` could
+be kept in memory by the process and used to create `Y`.
 
 To be even more accurate there could be checks to see if data was actually read
 from the inputs or written to the outputs, by looking at `read`, `write`,
 `sendfile`, `copy_file_range`, and so on.
 
 ## Pipes
+
+Pipes are frequently used on Unix to string processes together, where the
+output of one process is the input of another process. A typical use is to
+transform data, replacing characters, or filtering data. Tracking opened files
+of which the data is read by one process and then sent via a pipe to another
+process is difficult.
 
 The [original paper](TUD-SERG-2012-010.pdf) says on page 9:
 
