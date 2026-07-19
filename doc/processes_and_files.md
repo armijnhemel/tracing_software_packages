@@ -51,13 +51,32 @@ B ---> |    |
        +----+
 ```
 
-Because `B` wasn't opened yet when `X` was written, it cannot be an input, but
-for `Y` it cannot be excluded that `A` is an input, as data read from `A` could
-be kept in memory by the process and used to create `Y`.
+Because `B` wasn't opened yet when `X` was written (and closed), it cannot be
+an input, but for `Y` it cannot be excluded that `A` is an input, as data read
+from `A` could be kept in memory by the process and used to create `Y`.
 
 To be even more accurate there could be checks to see if data was actually read
 from the inputs or written to the outputs, by looking at `read`, `write`,
 `sendfile`, `copy_file_range`, and so on.
+
+Between `X` being opened, written to and closed, the writing process could open
+other files, so a more accurate picture would be:
+
+```
+       +----+
+A ---> |    |
+       |    | --> open X
+       |    | --> close X (input: A)
+       |    |
+B ---> |    |
+       |    | --> open Y
+C ---> |    |
+       |    | --> close Y (input: A & B & C)
+       +----+
+```
+
+For a single process this isn't difficult to implement. It becomes more
+difficult when using pipes.
 
 ## Pipes
 
@@ -84,3 +103,24 @@ for reading from and writing to a pipe in different processes aren't reliable:
 when looking just at the timestamps data seems to be read from the pipe in one
 process before it is written in the other process. This happens when the read
 is done in blocking mode.
+
+Pipes aren't bidirectional: they are unidirectional. When a pipe is created
+typically one side is closed immediately, depending on whether the process
+is reading from or writing to the pipe. This means that the dependencies are
+also unidirectional: any files opened by the process writing to the pipe are
+inputs to the process reading from the pipe, as long as the pipe is open. It
+could happen that new files are opened after the pipe has been opened, but
+before it has been closed and the output file is still being written to. To
+expand the picture from above:
+
+```
+      +----+        +----+
+A --> |    | -----> |    |
+      |    |        |    | --> open X
+      |    |        |    | --> close X (input: A)
+      |    | B ---> |    |
+      |    |        |    | --> open Y
+C --> |    | -----> |    |
+      |    |        |    | --> close Y (input: A & B & C)
+      +----+        +----+
+```
