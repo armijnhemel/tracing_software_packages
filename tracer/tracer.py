@@ -8,6 +8,10 @@ class OpenedFile:
         self._fd = fd
         self._timestamp = timestamp
 
+        # store the paths that were used to create this file.
+        # This isn't relevant for files that are only read.
+        self._inputs = []
+
     @property
     def cwd(self):
         '''Return the current working directory'''
