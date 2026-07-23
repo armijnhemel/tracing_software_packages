@@ -398,6 +398,9 @@ def single_tracefile(tracefile_root, pid, parent, cwd, output_directory, debug):
     renamed = []
     statted = []
 
+    # Store files that were opened by child processes
+    opened_by_child_processes = []
+
     closed = set()
     read = set()
     written = set()
@@ -507,6 +510,24 @@ def single_tracefile(tracefile_root, pid, parent, cwd, output_directory, debug):
                         del fds_to_pipe[fd]
                     except Exception as e:
                         pass
+
+                    try:
+                        pipe_nr = close_res.group('path').split('[')[1][:-1]
+                        read_fd = pipe_to_fds[pipe_nr].get('read', None)
+                        write_fd = pipe_to_fds[pipe_nr].get('write', None)
+                        if read_fd == fd:
+                            del pipe_to_fds[pipe_nr]['read']
+                        elif write_fd == fd:
+                            del pipe_to_fds[pipe_nr]['write']
+
+                        # check if pipe_to_fds[pine_nr] is empty and
+                        # delete if so.
+                        if not pipe_to_fds[pipe_nr]:
+                            del pipe_to_fds[pipe_nr]
+                    except Exception as e:
+                        pass
+                    trace_process.fds_to_pipe = copy.copy(fds_to_pipe)
+                    trace_process.pipe_to_fds = copy.copy(pipe_to_fds)
                 trace_process.open_fds = list(open_fds.values())
             elif syscall == 'dup2':
                 dup2_res = syscalls.dup2_re.search(line)
@@ -586,16 +607,25 @@ def single_tracefile(tracefile_root, pid, parent, cwd, output_directory, debug):
                 # man 7 pipe
                 pipe_res = syscalls.pipe2_re.search(line)
                 if pipe_res:
+                    # each pipe has a read and write file descriptor associated with it
                     read_fd = pipe_res.group('read_fd')
                     write_fd = pipe_res.group('write_fd')
+
+                    # in the strace output there are two values for the pipe
+                    # namely the read end and the write end. These are always
+                    # identical, but extracted for completeness sake.
                     read_pipe = pipe_res.group('read_pipe')
                     write_pipe = pipe_res.group('write_pipe')
+
+                    # store the file descriptor/pipe mappings
                     fds_to_pipe[read_fd] = read_pipe
                     fds_to_pipe[write_fd] = read_pipe
                     pipe_to_fds[read_pipe] = {'read': read_fd, 'write': write_fd}
                     if write_fd in open_fds:
                         open_fds[read_fd] = copy.deepcopy(open_fds[write_fd])
                     trace_process.open_fds = list(open_fds.values())
+                    trace_process.fds_to_pipe = copy.copy(fds_to_pipe)
+                    trace_process.pipe_to_fds = copy.copy(pipe_to_fds)
                 elif debug:
                     print('pipe2 failed:', line, file=sys.stderr)
             elif syscall in ['read', 'pread64']:
