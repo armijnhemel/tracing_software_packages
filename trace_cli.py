@@ -98,18 +98,23 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
         directory, _, files = trace_walk
         for f in files:
             tracefile = directory / f
-            with open(tracefile, 'r') as candidate:
-                for line in candidate:
-                    try:
-                        timestamp = float(line.split()[0])
-                    except:
-                        print(f"tracefile {tracefile} does not seem to contain a valid timestamp, exiting",
-                              file=sys.stderr)
-                        sys.exit(1)
-                    if timestamp < earliest:
-                        rootfile = tracefile
-                        earliest = timestamp
-                    break
+            try:
+                with open(tracefile, 'r') as candidate:
+                    for line in candidate:
+                        try:
+                            timestamp = float(line.split()[0])
+                        except ValueError:
+                            print(f"tracefile {tracefile} does not seem to contain a valid timestamp, exiting",
+                                  file=sys.stderr)
+                            sys.exit(1)
+                        if timestamp < earliest:
+                            rootfile = tracefile
+                            earliest = timestamp
+                        break
+            except UnicodeDecodeError:
+                print(f"tracefile {tracefile} does not seem to contain a valid trace, exiting",
+                        file=sys.stderr)
+                sys.exit(1)
 
     default_pid = rootfile.suffix[1:]
 
