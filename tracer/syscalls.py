@@ -44,7 +44,7 @@ symlinkat_re = re.compile(r"symlinkat\(\"(?P<target>[\w\d\s/\.+\-_,]+)\",\s+(?P<
 dup_re = re.compile(r"dup\((?P<old_fd>\d+)<(?P<fd_resolved>[\d\w/\-+_\.:\[\]]+)>\)\s+=\s+(?P<new_fd>\d+)")
 
 # dup2 & dup3
-dup2_re = re.compile(r"dup2\((?P<old_fd>\d+)<(?P<fd_resolved>[\d\w/\-+_\.:\[\]]+)>,\s+(?P<new_fd>\d+)")
+dup2_re = re.compile(r"dup2\((?P<old_fd>\d+)<(?P<old_fd_resolved>[\d\w/\-+_\.:\[\]]+)>,\s+(?P<new_fd>\d+)<(?P<new_fd_resolved>[\d\w/\-+_\.:\[\]]+)>")
 #dup3
 
 # pipe2
