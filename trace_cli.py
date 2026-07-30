@@ -553,6 +553,8 @@ def single_tracefile(tracefile_root, pid, parent, cwd, output_directory, debug):
                     new_file.fd = new_fd
                     open_fds[new_fd] = new_file
                 trace_process.open_fds = list(open_fds.values())
+                if 'pipe:[' in dup2_res.group('old_fd_resolved') or 'pipe:[' in dup2_res.group('new_fd_resolved'):
+                    pass
             elif syscall == 'execve':
                 # store the programs that are (successfully) executed
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
