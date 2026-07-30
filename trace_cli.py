@@ -133,7 +133,7 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
     single_tracefile(rootfile, default_pid, parent, cwd, output_directory, debug)
 
     # Finally write meta results to JSON
-    meta = {'buildid': buildid, 'root': default_pid, 'basepath': str(basepath)}
+    meta = {'buildid': buildid, 'root': default_pid, 'basepath': str(basepath), 'output': 'pickle'}
 
     with open(output_directory / "meta.json", 'w') as outfile:
         json.dump(meta, outfile, indent=4)
