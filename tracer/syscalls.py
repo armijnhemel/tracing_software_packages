@@ -37,7 +37,7 @@ vfork_re = re.compile(r"vfork\(\s*\)\s*=\s*(?P<clone_pid>\d+)<(?P<command>.*)>")
 execve_re = re.compile(r"execve\(\"(?P<command>.*)\",\s*\[(?P<args>.*)\],\s+0x\w+\s+/\*\s+\d+\s+vars\s+\*/\)\s*=\s*(?P<returncode>\d+)")
 
 # getpid
-getpid_re = re.compile(r"getpid\(\)\s+=\s+\d*<([\w\d\-_\.]+)>")
+getpid_re = re.compile(r"getpid\(\)\s+=\s+\d*<(.+)>")
 
 # symlink
 # symlink_re =
