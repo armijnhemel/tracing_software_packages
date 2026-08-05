@@ -128,9 +128,12 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
     # set the first "current working directory"
     cwd = ''
 
+    # set the first "command"
+    command = None
+
     # Process the first tracefile. This will process the other
     # dependent trace files recursively.
-    single_tracefile(rootfile, default_pid, parent, cwd, output_directory, debug)
+    single_tracefile(rootfile, default_pid, parent, cwd, command, output_directory, debug)
 
     # Finally write meta results to JSON
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': str(basepath), 'output': 'pickle'}
@@ -263,6 +266,79 @@ def get_files(pickle_directory, debug=False):
 
     return (meta, source_files, system_files, renamed_files, source_files_statted)
 
+def get_processes(pickle_directory, debug=False):
+    '''Helper method to return a processes object that can be turned into a graph'''
+    if debug:
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        print(f"{now} - Started reading trace data from {pickle_directory}", file=sys.stderr)
+
+    # store which children create which processes
+    pid_to_children = {}
+    pid_to_command = {}
+
+    # load the data, starting with the top level meta file
+    with open(pickle_directory / 'meta.json', 'r', encoding='utf-8') as meta_file:
+        meta = json.load(meta_file)
+
+    pid_deque = collections.deque()
+    pid_deque.append(meta['root'])
+
+    basepath = pathlib.Path(meta['basepath'])
+
+    # load the first pickle and then recurse
+    while True:
+        try:
+            pid = pid_deque.popleft()
+            with open(pickle_directory / f"{pid}.pickle", 'rb') as infile:
+                data = pickle.load(infile)
+                pid_deque.extend(data.children)
+                pid_to_children[pid] = data.children
+                pid_to_command[pid] = data.command
+        except IndexError:
+            break
+
+    if debug:
+        now = datetime.datetime.now(datetime.UTC).isoformat()
+        print(f"{now} - Finished reading trace data from {pickle_directory}", file=sys.stderr)
+    return pid_to_children, pid_to_command
+
+@app.command(short_help='Create process creation graph')
+@click.option('--pickle-dir', '-p', 'pickle_directory', required=True,
+              help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
+@click.option('--output-format', 'output_format', required=True,
+              help='output format', type=click.Choice(['graphviz', 'json', 'text', 'yaml']))
+@click.option('--debug', '-d', is_flag=True, help='print debug information')
+def create_process_graph(pickle_directory, output_format, debug):
+    '''Top level method to create a process graph'''
+    meta_file = pathlib.Path(pickle_directory / 'meta.json')
+    if not meta_file.exists():
+        raise click.ClickException(f"{meta_file} does not exist")
+
+    with open(pickle_directory / 'meta.json', 'r', encoding='utf-8') as meta_file:
+        meta = json.load(meta_file)
+
+    pid_to_children, pid_to_command = get_processes(pickle_directory, debug)
+
+    # walk the children, starting with the root process
+    pid_deque = collections.deque()
+    pid_deque.append(meta['root'])
+
+    while True:
+        try:
+            pid = pid_deque.popleft()
+            if pid_to_children[pid]:
+
+                if output_format == 'text':
+                    if pid_to_command[pid]['args']:
+                        cmd = f"{pid_to_command[pid]['command']} {pid_to_command[pid]['args']}"
+                    else:
+                        cmd = f"{pid_to_command[pid]['command']}"
+                    print(f"PID {pid} COMMAND {cmd} CREATES {pid_to_children[pid]}")
+                pid_deque.extend(pid_to_children[pid])
+        except IndexError:
+            break
+
+
 @app.command(short_help='Print all opened files')
 @click.option('--pickle-dir', '-p', 'pickle_directory', required=True,
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
@@ -385,7 +461,7 @@ def search_path(pickle_directory, debug, searchpath):
 
     meta, source_files, system_files, renamed_files, source_files_statted = get_files(pickle_directory, debug)
 
-def single_tracefile(tracefile_root, pid, parent, cwd, output_directory, debug):
+def single_tracefile(tracefile_root, pid, parent, cwd, command, output_directory, debug):
     '''Process a single trace file. Recurse into trace files of child processes.'''
     # Create the trace process object and associate the
     # PID and a fictional parent with it.
@@ -400,7 +476,6 @@ def single_tracefile(tracefile_root, pid, parent, cwd, output_directory, debug):
 
     # local information
     children_pids = []
-    command = None
 
     # Store if files were (successfully) opened, renamed, statted or written/created.
     # These collections could overlap.
@@ -488,6 +563,13 @@ def single_tracefile(tracefile_root, pid, parent, cwd, output_directory, debug):
                 # the PID of the cloned process
                 clone_pid = cloneres.group('clone_pid')
 
+                # store the command of the cloned process. This is often also
+                # available in the child process via getpid() and then frequently
+                # overwritten by execve, but sometimes neither is used and then
+                # it is hard to guess from the child process what the command
+                # actually was.
+                clone_command = cloneres.group('command')
+
                 flags = []
                 if syscall != 'vfork':
                     flags = cloneres.group('flags')
@@ -497,7 +579,7 @@ def single_tracefile(tracefile_root, pid, parent, cwd, output_directory, debug):
 
                 # Create a trace process and process trace file for the child process.
                 single_tracefile(tracefile_root, clone_pid, trace_process, cwd,
-                                         output_directory, debug)
+                                         clone_command, output_directory, debug)
 
             elif syscall == 'close':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
@@ -570,6 +652,14 @@ def single_tracefile(tracefile_root, pid, parent, cwd, output_directory, debug):
                     cwd = pathlib.Path(os.path.normpath(getcwd_result.group('cwd')))
                 elif debug:
                     print('getcwd failed:', line, file=sys.stderr)
+            elif syscall == 'getpid':
+                # create a placeholder for commands. This value is typically
+                # overwritten when parsing execve
+                getpid_results = syscalls.getpid_re.search(line)
+                if getpid_results:
+                    command = {'command': getpid_results.groups()[0], 'args': None}
+                elif debug:
+                    print('getpid failed:', line, file=sys.stderr)
             elif syscall == 'newfstatat':
                 if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
                     continue
