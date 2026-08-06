@@ -306,7 +306,7 @@ def get_processes(pickle_directory, debug=False):
 @click.option('--pickle-dir', '-p', 'pickle_directory', required=True,
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--output-format', 'output_format', required=True,
-              help='output format', type=click.Choice(['graphviz', 'json', 'text', 'yaml']))
+              help='output format', type=click.Choice(['graphviz', 'text']))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 def create_process_graph(pickle_directory, output_format, debug):
     '''Top level method to create a process graph'''
@@ -568,7 +568,7 @@ def single_tracefile(tracefile_root, pid, parent, cwd, command, output_directory
                 # overwritten by execve, but sometimes neither is used and then
                 # it is hard to guess from the child process what the command
                 # actually was.
-                clone_command = cloneres.group('command')
+                clone_command = {'command': cloneres.group('command'), 'args': None}
 
                 flags = []
                 if syscall != 'vfork':
