@@ -22,6 +22,7 @@ import shutil
 import sys
 
 import click
+import graphviz
 
 from tracer import syscalls
 from tracer import tracer
@@ -307,8 +308,12 @@ def get_processes(pickle_directory, debug=False):
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--output-format', 'output_format', required=True,
               help='output format', type=click.Choice(['graphviz', 'text']))
+@click.option('--output-file', 'output_file', required=True,
+              help='output file (don\'t use an extension!)',
+              type=click.Path(path_type=pathlib.Path))
+@click.option('--alt-root', help='alternative root PID')
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
-def create_process_graph(pickle_directory, output_format, debug):
+def create_process_graph(pickle_directory, output_format, output_file, alt_root, debug):
     '''Top level method to create a process graph'''
     meta_file = pathlib.Path(pickle_directory / 'meta.json')
     if not meta_file.exists():
@@ -321,22 +326,41 @@ def create_process_graph(pickle_directory, output_format, debug):
 
     # walk the children, starting with the root process
     pid_deque = collections.deque()
-    pid_deque.append(meta['root'])
+
+    # create an initial graph if graphviz is the output format
+    if output_format == 'graphviz':
+        output_graph = graphviz.Digraph()
+        output_graph.attr(rankdir='LR')
+        if alt_root:
+            pid = alt_root
+        else:
+            pid = meta['root']
+        pid_deque.append(pid)
+        cmd = f"PID: {pid}\n{pid_to_command[pid]['command']}"
+        output_graph.node(pid, cmd)
 
     while True:
         try:
             pid = pid_deque.popleft()
             if pid_to_children[pid]:
-
                 if output_format == 'text':
                     if pid_to_command[pid]['args']:
                         cmd = f"{pid_to_command[pid]['command']} {pid_to_command[pid]['args']}"
                     else:
                         cmd = f"{pid_to_command[pid]['command']}"
                     print(f"PID {pid} COMMAND {cmd} CREATES {pid_to_children[pid]}")
+                elif output_format == 'graphviz':
+                    for child in pid_to_children[pid]:
+                        child_cmd = f"PID: {child}\n{pid_to_command[child]['command']}"
+                        output_graph.node(child, child_cmd)
+                        output_graph.edge(pid, child)
                 pid_deque.extend(pid_to_children[pid])
         except IndexError:
             break
+
+    if output_format == 'graphviz':
+        output_graph.format = 'png'
+        output_graph.render(filename=output_file)
 
 
 @app.command(short_help='Print all opened files')
