@@ -1,8 +1,15 @@
 # Processing results
 
-After running `strace` the results (stored as pickle files in a directory) can
-be processed to extract results. There are a few possibly interesting uses for
-the data.
+The results of running `strace` are stored as text files. These first need to
+be processed to turn the text with syscalls into data structures. For big
+builds (such as the Linux kernel) this can take quite some time and to do this
+for every use case. This is why processing output of `strace` and processing
+the data structures has been decoupled, so the expensive bit (processing the
+`strace` output) only has to be done once.
+
+Processing the output of `strace` and turning them into data structures is done
+using the `process-trace` subcommand of the `trace_cli.py` program. The
+resulting pickles can then be used for functionality that will build on top.
 
 To turn the trace files to pickle files use the following command:
 
