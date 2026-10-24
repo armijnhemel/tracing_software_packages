@@ -66,7 +66,7 @@ def app():
 @click.option('--out', '-o', 'output_directory', required=True,
               help='name of output directory', type=click.Path(path_type=pathlib.Path))
 def process_trace(basepath, buildid, tracefiles, output_directory, debug):
-    '''Top level trace processor'''
+    '''Trace processor'''
     if not basepath.is_absolute():
         raise click.ClickException("--basepath should be an absolute path")
 
@@ -100,7 +100,7 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
         for f in files:
             tracefile = directory / f
             try:
-                with open(tracefile, 'r') as candidate:
+                with open(tracefile, encoding='utf-8', mode='r') as candidate:
                     for line in candidate:
                         try:
                             timestamp = float(line.split()[0])
@@ -139,7 +139,7 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
     # Finally write meta results to JSON
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': str(basepath), 'output': 'pickle'}
 
-    with open(output_directory / "meta.json", 'w') as outfile:
+    with open(output_directory / "meta.json", encoding='utf-8', mode='w') as outfile:
         json.dump(meta, outfile, indent=4)
 
     if debug:
@@ -314,7 +314,7 @@ def get_processes(pickle_directory, debug=False):
 @click.option('--alt-root', help='alternative root PID')
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 def create_process_graph(pickle_directory, output_format, output_file, alt_root, debug):
-    '''Top level method to create a process graph'''
+    '''Create a process graph'''
     meta_file = pathlib.Path(pickle_directory / 'meta.json')
     if not meta_file.exists():
         raise click.ClickException(f"{meta_file} does not exist")
@@ -368,7 +368,7 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 def print_open_files(pickle_directory, debug):
-    '''Top level method to print all files that were opened during a build.'''
+    '''Print all files that were opened during a build.'''
     meta_file = pathlib.Path(pickle_directory / 'meta.json')
     if not meta_file.exists():
         raise click.ClickException(f"{meta_file} does not exist")
@@ -399,6 +399,7 @@ def print_open_files(pickle_directory, debug):
 @click.option('--ignore-not-found', is_flag=True, help='ignore file not found errors')
 def copy_files(pickle_directory, source_directory, output_directory, ignore_stat,
                ignore_not_found, debug):
+    '''Copy all files that were opened during a build.'''
     # directory with original source code files
     if not source_directory.is_dir():
         raise click.ClickException(f"{source_directory} does not exist or is not a directory")
@@ -478,7 +479,7 @@ def copy_files(pickle_directory, source_directory, output_directory, ignore_stat
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 def search_path(pickle_directory, debug, searchpath):
-    '''Top level method to print all files that were opened during a build.'''
+    '''Print all files that were opened during a build.'''
     meta_file = pathlib.Path(pickle_directory / 'meta.json')
     if not meta_file.exists():
         raise click.ClickException(f"{meta_file} does not exist")
@@ -530,7 +531,7 @@ def single_tracefile(tracefile_root, pid, parent, cwd, command, output_directory
 
     # Copy any pipe information from the parent process
 
-    with open(tracefile, 'r') as file_to_process:
+    with open(tracefile, encoding='utf-8', mode='r') as file_to_process:
         for line in file_to_process:
             # Skip lines that do not contain tracing information
             if '=' not in line:
@@ -624,7 +625,7 @@ def single_tracefile(tracefile_root, pid, parent, cwd, command, output_directory
                     # Remove any file descriptors associated with pipes.
                     try:
                         del fds_to_pipe[fd]
-                    except Exception as e:
+                    except KeyError:
                         pass
 
                     try:
@@ -640,7 +641,7 @@ def single_tracefile(tracefile_root, pid, parent, cwd, command, output_directory
                         # delete if so.
                         if not pipe_to_fds[pipe_nr]:
                             del pipe_to_fds[pipe_nr]
-                    except Exception as e:
+                    except KeyError:
                         pass
                     trace_process.fds_to_pipe = copy.copy(fds_to_pipe)
                     trace_process.pipe_to_fds = copy.copy(pipe_to_fds)
