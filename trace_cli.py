@@ -366,8 +366,10 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
 @app.command(short_help='Print all opened files')
 @click.option('--pickle-dir', '-p', 'pickle_directory', required=True,
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
+@click.option('--output-format', 'output_format', required=True,
+              help='output format', type=click.Choice(['json', 'text']))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
-def print_open_files(pickle_directory, debug):
+def print_open_files(pickle_directory, output_format, debug):
     '''Print all files that were opened during a build.'''
     meta_file = pathlib.Path(pickle_directory / 'meta.json')
     if not meta_file.exists():
@@ -375,17 +377,25 @@ def print_open_files(pickle_directory, debug):
 
     meta, source_files, system_files, renamed_files, source_files_statted = get_files(pickle_directory, debug)
 
-    if system_files:
-        print("System files:")
-        for input_file in system_files:
-            print(f"- {input_file}")
-        print()
+    if output_format == 'text':
+        if system_files:
+            print("System files:")
+            for input_file in system_files:
+                print(f"- {input_file}")
+            print()
 
-    if source_files:
-        print("Source files:")
-        for input_file in source_files:
-            print_path = input_file.relative_to(meta['basepath'])
-            print(f"- {print_path}")
+        if source_files:
+            print("Source files:")
+            for input_file in source_files:
+                print_path = input_file.relative_to(meta['basepath'])
+                print(f"- {print_path}")
+    elif output_format == 'json':
+        json_out = {}
+        if system_files:
+            json_out['system'] = list(map(lambda x: str(x), system_files))
+        if source_files:
+            json_out['source'] = list(map(lambda x: str(x.relative_to(meta['basepath'])), source_files))
+        print(json.dumps(json_out, indent=4))
 
 @app.command(short_help='Copy source code files')
 @click.option('--pickle', '-p', 'pickle_directory', required=True,

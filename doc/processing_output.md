@@ -53,7 +53,7 @@ the process that was traced).
 The command:
 
 ```
-$ python trace_cli.py print-open-files --pickle-dir=/path/to/pickle/dir
+$ python trace_cli.py print-open-files --pickle-dir=/path/to/pickle/dir --output-format=text
 ```
 
 will print all the opened files and splits them into two categories:
@@ -64,6 +64,8 @@ will print all the opened files and splits them into two categories:
 2. source files: anything from the source code directory. This might contain
    build artifacts and not just source code files (this will added as an option
    later)
+
+To output in JSON use `--output-format=json` instead.
 
 ## Copying all opened files to a separate directory
 
