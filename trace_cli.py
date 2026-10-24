@@ -340,6 +340,8 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
         output_graph.attr(rankdir='LR')
         cmd = f"PID: {pid}\n{pid_to_command[pid]['command']}"
         output_graph.node(pid, cmd)
+    elif output_format == 'text':
+        opened_file = open(output_file, encoding='utf-8', mode='w')
 
     while True:
         try:
@@ -350,7 +352,7 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
                         cmd = f"{pid_to_command[pid]['command']} {pid_to_command[pid]['args']}"
                     else:
                         cmd = f"{pid_to_command[pid]['command']}"
-                    print(f"PID {pid} COMMAND {cmd} CREATES {pid_to_children[pid]}")
+                    print(f"PID {pid} COMMAND {cmd} CREATES {pid_to_children[pid]}", file=opened_file)
                 elif output_format == 'graphviz':
                     for child in pid_to_children[pid]:
                         child_cmd = f"PID: {child}\n{pid_to_command[child]['command']}"
@@ -363,6 +365,8 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
     if output_format == 'graphviz':
         output_graph.format = 'png'
         output_graph.render(filename=output_file)
+    elif output_format == 'text':
+        opened_file.close()
 
 
 @app.command(short_help='Print all opened files')
