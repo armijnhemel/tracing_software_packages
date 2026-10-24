@@ -327,15 +327,17 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
     # walk the children, starting with the root process
     pid_deque = collections.deque()
 
+    if alt_root:
+        pid = alt_root
+    else:
+        pid = meta['root']
+
+    pid_deque.append(pid)
+
     # create an initial graph if graphviz is the output format
     if output_format == 'graphviz':
         output_graph = graphviz.Digraph()
         output_graph.attr(rankdir='LR')
-        if alt_root:
-            pid = alt_root
-        else:
-            pid = meta['root']
-        pid_deque.append(pid)
         cmd = f"PID: {pid}\n{pid_to_command[pid]['command']}"
         output_graph.node(pid, cmd)
 
