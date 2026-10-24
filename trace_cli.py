@@ -482,14 +482,14 @@ def copy_files(pickle_directory, source_directory, output_directory, ignore_stat
         shutil.copy(source_file, destination)
 
 
-@app.command(short_help='Search a file in the output and report the process ids')
+@app.command(short_help='Search a file in the output and report all relevant process ids')
 @click.option('--path', '-f', 'searchpath', type=click.Path(path_type=pathlib.Path),
               help='path to be searched', required=True)
 @click.option('--pickle-dir', '-p', 'pickle_directory', required=True,
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
 def search_path(pickle_directory, debug, searchpath):
-    '''Print all files that were opened during a build.'''
+    '''Search a file in the output and report all relevant process ids.'''
     meta_file = pathlib.Path(pickle_directory / 'meta.json')
     if not meta_file.exists():
         raise click.ClickException(f"{meta_file} does not exist")
