@@ -24,6 +24,12 @@ import sys
 import click
 import graphviz
 
+import yaml
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    from yaml import Loader, Dumper
+
 from tracer import syscalls
 from tracer import tracer
 
@@ -307,7 +313,7 @@ def get_processes(pickle_directory, debug=False):
 @click.option('--pickle-dir', '-p', 'pickle_directory', required=True,
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--output-format', 'output_format', required=True,
-              help='output format', type=click.Choice(['graphviz', 'json', 'text']))
+              help='output format', type=click.Choice(['graphviz', 'json', 'text', 'yaml']))
 @click.option('--output-file', 'output_file', required=True,
               help='output file (don\'t use an extension!)',
               type=click.Path(path_type=pathlib.Path))
@@ -340,7 +346,7 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
         output_graph.attr(rankdir='LR')
         cmd = f"PID: {pid}\n{pid_to_command[pid]['command']}"
         output_graph.node(pid, cmd)
-    elif output_format == 'json':
+    elif output_format in ['json', 'yaml']:
         opened_file = open(output_file, encoding='utf-8', mode='w')
         output_graph = {'root': pid, 'nodes': []}
     elif output_format == 'text':
@@ -349,7 +355,7 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
     while True:
         try:
             pid = pid_deque.popleft()
-            if output_format == 'json':
+            if output_format in ['json', 'yaml']:
                 command = pid_to_command[pid]['command']
                 args = pid_to_command[pid]['args']
                 node = {'pid': pid, 'creates': [], 'command': command, 'args': args}
@@ -365,7 +371,7 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
                         child_cmd = f"PID: {child}\n{pid_to_command[child]['command']}"
                         output_graph.node(child, child_cmd)
                         output_graph.edge(pid, child)
-                elif output_format == 'json':
+                elif output_format in ['json', 'yaml']:
                     command = pid_to_command[pid]['command']
                     args = pid_to_command[pid]['args']
                     node = {'pid': pid, 'creates': [], 'command': command, 'args': args}
@@ -379,7 +385,7 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
                 if output_format == 'text':
                     print(f"PID {pid} COMMAND {cmd}", file=opened_file)
 
-            if output_format == 'json':
+            if output_format in ['json', 'yaml']:
                 output_graph['nodes'].append(node)
 
         except IndexError:
@@ -393,6 +399,10 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
         json.dump(output_graph, opened_file, indent=2)
         opened_file.close()
     elif output_format == 'text':
+        opened_file.close()
+    elif output_format == 'yaml':
+        # dump yaml
+        yaml.dump(output_graph, opened_file)
         opened_file.close()
 
 
