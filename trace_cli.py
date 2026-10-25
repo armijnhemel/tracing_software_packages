@@ -307,7 +307,7 @@ def get_processes(pickle_directory, debug=False):
 @click.option('--pickle-dir', '-p', 'pickle_directory', required=True,
               help='name of directory with pickle files', type=click.Path(path_type=pathlib.Path))
 @click.option('--output-format', 'output_format', required=True,
-              help='output format', type=click.Choice(['graphviz', 'text']))
+              help='output format', type=click.Choice(['graphviz', 'json', 'text']))
 @click.option('--output-file', 'output_file', required=True,
               help='output file (don\'t use an extension!)',
               type=click.Path(path_type=pathlib.Path))
@@ -340,31 +340,58 @@ def create_process_graph(pickle_directory, output_format, output_file, alt_root,
         output_graph.attr(rankdir='LR')
         cmd = f"PID: {pid}\n{pid_to_command[pid]['command']}"
         output_graph.node(pid, cmd)
+    elif output_format == 'json':
+        opened_file = open(output_file, encoding='utf-8', mode='w')
+        output_graph = {'root': pid, 'nodes': []}
     elif output_format == 'text':
         opened_file = open(output_file, encoding='utf-8', mode='w')
 
     while True:
         try:
             pid = pid_deque.popleft()
+            if output_format == 'json':
+                command = pid_to_command[pid]['command']
+                args = pid_to_command[pid]['args']
+                node = {'pid': pid, 'creates': [], 'command': command, 'args': args}
+            elif output_format == 'text':
+                if pid_to_command[pid]['args']:
+                    cmd = f"{pid_to_command[pid]['command']} {pid_to_command[pid]['args']}"
+                else:
+                    cmd = f"{pid_to_command[pid]['command']}"
+
             if pid_to_children[pid]:
-                if output_format == 'text':
-                    if pid_to_command[pid]['args']:
-                        cmd = f"{pid_to_command[pid]['command']} {pid_to_command[pid]['args']}"
-                    else:
-                        cmd = f"{pid_to_command[pid]['command']}"
-                    print(f"PID {pid} COMMAND {cmd} CREATES {pid_to_children[pid]}", file=opened_file)
-                elif output_format == 'graphviz':
+                if output_format == 'graphviz':
                     for child in pid_to_children[pid]:
                         child_cmd = f"PID: {child}\n{pid_to_command[child]['command']}"
                         output_graph.node(child, child_cmd)
                         output_graph.edge(pid, child)
+                elif output_format == 'json':
+                    command = pid_to_command[pid]['command']
+                    args = pid_to_command[pid]['args']
+                    node = {'pid': pid, 'creates': [], 'command': command, 'args': args}
+                    for child in pid_to_children[pid]:
+                        create = {'pid': child}
+                        node['creates'].append(create)
+                elif output_format == 'text':
+                    print(f"PID {pid} COMMAND {cmd} CREATES {pid_to_children[pid]}", file=opened_file)
                 pid_deque.extend(pid_to_children[pid])
+            else:
+                if output_format == 'text':
+                    print(f"PID {pid} COMMAND {cmd}", file=opened_file)
+
+            if output_format == 'json':
+                output_graph['nodes'].append(node)
+
         except IndexError:
             break
 
     if output_format == 'graphviz':
         output_graph.format = 'png'
         output_graph.render(filename=output_file)
+    elif output_format == 'json':
+        # dump JSON
+        json.dump(output_graph, opened_file, indent=2)
+        opened_file.close()
     elif output_format == 'text':
         opened_file.close()
 
