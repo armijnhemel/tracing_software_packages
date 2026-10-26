@@ -11,12 +11,45 @@ This project has a few goals:
    better search and allow creation of finer grained SBOM files
 2. creating a reference dataset for many packages with this information
 
+## Quick start
+
+Example: BusyBox 1.37.0
+
+1. download BusyBox 1.37.0 sources: `wget -c https://busybox.net/downloads/busybox-1.37.0.tar.bz2`
+1. unpack BusyBox 1.37.0 sources: `tar xf busybox-1.37.0.tar.bz2`
+1. change to BusyBox directory: `cd busybox-1.37.0/`
+1. copy the configuration file from the `data` directory, for example: `cp ~/git/tracing_software_packages/data/busybox-1.37.0.config .config`
+1. create a directory to store `strace` output: `mkdir /tmp/trace`
+1. trace a build using `strace`: `strace -o /tmp/trace/busybox-trace -e trace=chdir,getcwd,link,linkat,mkdir,newfstatat,open,openat,rename,renameat2,copy_file_range,sendfile,sendfile64,symlink,symlinkat,unlink,unlinkat,%process,dup,dup2,dup3,close,pipe,pipe2,tee,fchdir,write,pwrite64 -y -Y -qq -ttt -f -ff --seccomp-bpf -s 128 make`
+
+Verify that there are trace result files in the directory `/tmp/trace`:
+
+```
+$ ls /tmp/trace | wc -l
+5668
+```
+
+Then information from the trace files needs to be extracted and turned into
+Python pickle files:
+
+```
+$ python trace_cli.py process-trace -b /tmp/busybox-1.37.0 -u project-123 -f /tmp/trace/ -o /tmp/pickles
+```
+
+Finally the pickle files can be used to further process data, such as creating
+a process graph and output in JSON:
+
+```
+$ python trace_cli.py create-process-graph --pickle-dir=/tmp/pickles --output-format=json --output-file=/tmp/out.txt
+```
+
 ## How to use
 
-There are two separate steps:
+There are three distinct steps:
 
 1. tracing a build using `strace`, see [running strace](doc/running_strace.md)
-2. processing the trace file from step 1.
+1. extract information from the trace file from step 1 and store in Python pickle files
+1. processing the pickle files from the previous steps
 
 ## Funding
 
