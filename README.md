@@ -45,9 +45,11 @@ $ python trace_cli.py create-process-graph --pickle-dir=/tmp/pickles --output-fo
 
 ## How to use
 
-There are three distinct steps:
+There are three distinct steps. First, there is tracing a build using `strace`,
+see [running strace](doc/running_strace.md).
 
-1. tracing a build using `strace`, see [running strace](doc/running_strace.md)
+Then (as described in detail in [processing output](doc/processing_output.md)):
+
 1. extract information from the trace file from step 1 and store in Python pickle files
 1. processing the pickle files from the previous steps
 
