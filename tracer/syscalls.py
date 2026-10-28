@@ -6,7 +6,7 @@ syscall_re = re.compile(r'\d+\.\d+\s+(?P<syscall>[\d\w_]+)\(')
 
 # regular expression for resumed syscalls
 # result: syscall
-syscall_resumed_re = re.compile(r'\d+\.\d+\s+<\.\.\.\s+(?P<syscall>[\d\w_]+)\s+resumed>[)[]')
+syscall_resumed_re = re.compile(r'\d+\.\d+\s+<\.\.\.\s+(?P<syscall>[\d\w_]+)\s+resumed>')
 
 # some precompiled regular expressions for interesting system calls
 # valid filename characters:
