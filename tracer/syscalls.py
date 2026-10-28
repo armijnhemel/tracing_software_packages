@@ -32,10 +32,13 @@ renameat2_re = re.compile(r"renameat2\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,
 
 # clone
 clone_re = re.compile(r"clone\([\w/\-+,.=]+,\s+(?P<flags>[\w|=]+),\s+[\w=]+?\)\s+=\s+(?P<clone_pid>\-?\d+)<(?P<command>.*)>")
+clone_resumed_re = re.compile(r"<\.\.\.\s+clone\s+resumed>,\s+[\w\d_=]+\)\s+=\s+(?P<clone_pid>\d+)<(?P<command>.*)>")
 clone3_re = re.compile(r"clone3\({flags=(?P<flags>[\w_|]+),\s+[\w{}=|,\s<>\[\]]+\)\s+=\s+(?P<clone_pid>\d+)<(?P<command>.*)>")
+clone3_resumed_re = re.compile(r"<\.\.\.\s+clone3\s+resumed>\)\s+=\s+(?P<clone_pid>\d+)<(?P<command>.*)>")
 
 # vfork
 vfork_re = re.compile(r"vfork\(\s*\)\s*=\s*(?P<clone_pid>\d+)<(?P<command>.*)>")
+vfork_resumed_re = re.compile(r"<\.\.\.\s+vfork\s+resumed>\)\s+=\s+(?P<clone_pid>\d+)<(?P<command>.*)>")
 
 # execve
 execve_re = re.compile(r"execve\(\"(?P<command>.*)\",\s*\[(?P<args>.*)\],\s+0x\w+\s+/\*\s+\d+\s+vars\s+\*/\)\s*=\s*(?P<returncode>\d+)")
