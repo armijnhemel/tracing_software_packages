@@ -153,12 +153,8 @@ class StatFile:
 
 
 class TraceProcess:
-    '''Helper class to store information about a single process.
-       When inherited by a child process it represents a snapshot
-       of the data at that exact moment. Data added later will not
-       be propagated to child processes. For example, if a file has
-       been opened after a child process was created, then the file
-       will not be updated in the child process.
+    '''Helper class to store information about and state of a single
+       process.
 
        At the end of the process' liftime this object should contain
        the entire state of the process.
@@ -177,6 +173,9 @@ class TraceProcess:
 
         # child PIDs of all child processes created and launched
         self._children = []
+
+        # current working directory
+        self._cwd = None
 
         # Files that were opened by this process (entire lifetime)
         # These are the full names of the files, without any associated
@@ -236,6 +235,14 @@ class TraceProcess:
     @command.setter
     def command(self, command):
         self._command = command
+
+    @property
+    def cwd(self):
+        return self._cwd
+
+    @cwd.setter
+    def cwd(self, cwd):
+        self._cwd = cwd
 
     @property
     def opened_files(self):
@@ -300,3 +307,10 @@ class TraceProcess:
     @open_fds.setter
     def open_fds(self, open_fds):
         self._open_fds = open_fds
+
+    def is_opened(self, pathname):
+        '''Check if a file has already been opened'''
+        # TODO
+        for o in self._opened_files:
+            pass
+        return False
