@@ -42,6 +42,8 @@ vfork_resumed_re = re.compile(r"<\.\.\.\s+vfork\s+resumed>\)\s+=\s+(?P<clone_pid
 
 # execve
 execve_re = re.compile(r"execve\(\"(?P<command>.*)\",\s*\[(?P<args>.*)\],\s+0x\w+\s+/\*\s+\d+\s+vars\s+\*/\)\s*=\s*(?P<returncode>\d+)")
+execve_unfinished_re = re.compile(r"execve\(\"(?P<command>.*)\",\s*\[(?P<args>.*)\],\s+0x\w+\s+/\*\s+\d+\s+vars\s+\*/\s+<unfinished\s+\.\.\.>")
+execve_resumed_re = re.compile(r"<\.\.\.\s+execve\s+resumed>\)\s+=\s+(?P<returncode>\d+)")
 
 # getpid
 getpid_re = re.compile(r"getpid\(\)\s+=\s+\d*<(.+)>")
