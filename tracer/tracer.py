@@ -178,8 +178,7 @@ class TraceProcess:
         self._cwd = None
 
         # Files that were opened by this process (entire lifetime)
-        # These are the full names of the files, without any associated
-        # file descriptor numbers, as those aren't relevant at the end.
+        # These are OpenedFile objects.
         self._opened_files = []
 
         # Files that were renamed by this process (entire lifetime)
@@ -257,6 +256,9 @@ class TraceProcess:
     def opened_files(self, opened_files):
         self._opened_files = opened_files
 
+    def add_opened_file(self, opened_file):
+        self._opened_files.append(opened_file)
+
     @property
     def read_files(self):
         return self._read_files
@@ -315,7 +317,5 @@ class TraceProcess:
 
     def is_opened(self, pathname):
         '''Check if a file has already been opened'''
-        # TODO
-        for o in self._opened_files:
-            pass
-        return False
+        names = set(map(lambda x: x.original_path, self._opened_files)) | set(map(lambda x: x.resolved_path, self._opened_files))
+        return pathname in names
