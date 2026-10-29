@@ -215,6 +215,11 @@ class TraceProcess:
         '''Return the process id of the parent process'''
         return self._parent_pid
 
+    @parent_pid.setter
+    def parent_pid(self, parent_pid):
+        '''Set the process id of the parent process'''
+        self._parent_pid = parent_pid
+
     @property
     def pid(self):
         '''Return the process id of this process'''
