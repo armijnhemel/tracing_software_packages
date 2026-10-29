@@ -12,6 +12,8 @@ syscall_resumed_re = re.compile(r'\d+\.\d+\s+<\.\.\.\s+(?P<syscall>[\d\w_]+)\s+r
 # valid filename characters:
 # <>\w\d/\-+,.*$:;
 chdir_re = re.compile(r"chdir\(\"(?P<path>[\w/\-_+,.]+)\"\s*\)\s+=\s+(?P<returncode>\d+)")
+chdir_resumed_re = re.compile(r"<\.\.\. chdir resumed>\)\s+=\s+(?P<returncode>\d+)")
+chdir_unfinished_re = re.compile(r"chdir\(\"(?P<path>[\w/\-_+,.]+)\"\s+<unfinished \.\.\.>")
 fchdir_re = re.compile(r"fchdir\((?P<fd>\d+)<(?P<path>.*)>\s*\)\s+=\s+(?P<returncode>\d+)")
 
 # open and openat
@@ -19,6 +21,8 @@ fchdir_re = re.compile(r"fchdir\((?P<fd>\d+)<(?P<path>.*)>\s*\)\s+=\s+(?P<return
 # sometime in 2017, around Fedora 27 (for reference).
 open_re = re.compile(r"open\(\"([<>\w/\-+,.*$:;]+)\", ([\w|]+)(?:,\s+\d+)?\)\s+= (\-?\d+)<(.*)>$")
 openat_re = re.compile(r"openat\((?P<open_fd>\w+)<(?P<cwd>.*)>, \"(?P<path>[<>\w/\-+,.*$:;]+)\", (?P<flags>[\w|]+)(?:,\s+\d+)?\)\s+=\s+(?P<result_fd>\-?\d+)<(?P<resolved_path>.*)>$")
+openat_resumed_re = re.compile(r"<\.\.\. openat resumed>\)\s+=\s+(?P<result_fd>\-?\d+)<(?P<resolved_path>.*)>$")
+openat_unfinished_re = re.compile(r"openat\((?P<open_fd>\w+)<(?P<cwd>.*)>, \"(?P<path>[<>\w/\-+,.*$:;]+)\", (?P<flags>[\w|]+)(?:,\s+\d+)?\s+<unfinished \.\.\.>$")
 
 # close
 close_re = re.compile(r"close\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>\)\s+=\s+(?P<returncode>\d+)")
