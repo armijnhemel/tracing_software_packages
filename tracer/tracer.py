@@ -293,6 +293,7 @@ class TraceProcess:
 
     def add_written_file(self, written_file):
         self._written_files.append(written_file)
+        self._written_files = list(set(self._written_files))
 
     @property
     def fds_to_pipe(self):
