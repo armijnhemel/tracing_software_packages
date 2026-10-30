@@ -291,6 +291,9 @@ class TraceProcess:
     def written_files(self, written_files):
         self._written_files = written_files
 
+    def add_written_file(self, written_file):
+        self._written_files.append(written_file)
+
     @property
     def fds_to_pipe(self):
         return self._fds_to_pipe
