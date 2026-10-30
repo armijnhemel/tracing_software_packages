@@ -190,8 +190,8 @@ class TraceProcess:
         # Files that were read by this process (entire lifetime)
         self._read_files = []
 
-        # Files that were read by this process (entire lifetime)
-        self._write_files = []
+        # Files that were written by this process (entire lifetime)
+        self._written_files = []
 
         # The shell command associated with the process
         self._command = None
