@@ -22,14 +22,14 @@ of processes. In that case the PID will wrap and the strace processing scripts
 will fail.
 
 The following command will write tracefiles for a subset of system calls, with
-one trace file per process:
+a single trace file for the entire build:
 
 ```console
-$ strace -o ../trace/linux-strace -e trace=chdir,getcwd,link,linkat,mkdir,newfstatat,open,openat,rename,renameat2,copy_file_range,sendfile,sendfile64,symlink,symlinkat,unlink,unlinkat,%process,dup,dup2,dup3,close,pipe,pipe2,tee,fchdir,write,pwrite64 -y -Y -qq -ttt -f -ff --seccomp-bpf -s 128 make
+$ strace -o ../trace/linux-strace -e trace=chdir,getcwd,link,linkat,mkdir,newfstatat,open,openat,rename,renameat2,copy_file_range,sendfile,sendfile64,symlink,symlinkat,unlink,unlinkat,%process,dup,dup2,dup3,close,pipe,pipe2,tee,fchdir,write,pwrite64 -y -Y -qq -ttt -f --seccomp-bpf -s 128 make
 ```
 
-This will write the individual trace files to a directory
-(`../trace/linux-strace`) which can then be processed by the other scripts in
+This will write the trace file to a directory (`../trace/`) which can then be
+processed by the other scripts in
 this repository.
 
 ## Statistics

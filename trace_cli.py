@@ -66,71 +66,31 @@ def app():
               type=click.Path(path_type=pathlib.Path))
 @click.option('--buildid', '-u', 'buildid', required=True,
               help='build id to be associated with the build', type=str)
-@click.option('--tracefiles', '-f', 'tracefiles', required=True,
-              help='path to trace files directory', type=click.Path(path_type=pathlib.Path))
+@click.option('--tracefile', '-f', 'tracefile', required=True,
+              help='path to trace files directory', type=click.File('r'))
 @click.option('--debug', '-d', is_flag=True, help='print debug information')
+@click.option('--force', is_flag=True, help='force processing data')
 @click.option('--out', '-o', 'output_directory', required=True,
               help='name of output directory', type=click.Path(path_type=pathlib.Path))
-def process_trace(basepath, buildid, tracefiles, output_directory, debug):
+def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
     '''Trace processor'''
     if not basepath.is_absolute():
         raise click.ClickException("--basepath should be an absolute path")
-
-    # a directory with all the tracefiles
-    if not (tracefiles.exists() and tracefiles.is_dir()):
-        raise click.ClickException(f"{tracefiles} does not exist or is not a directory")
 
     if buildid.strip() == "":
         raise click.ClickException("build identifier empty")
 
     # directory where pickles should be written to
     try:
-        if output_directory.exists():
+        if output_directory.exists() and not force:
             raise click.ClickException(f"{output_directory} already exists")
     except PermissionError as e:
         raise click.ClickException(f"Permission error for {output_directory}") from e
 
     try:
-        output_directory.mkdir()
+        output_directory.mkdir(exist_ok=True)
     except Exception as e:
         raise click.ClickException(f"Could not create {output_directory}") from e
-
-    # Find the top level tracefile by looking at the first trace line of
-    # every file, extracting the timestamp recorded and keeping track of the
-    # earliest timestamp. The file with the earliest timestamp is the root
-    # of the trace. Of course this will only work if the collection of trace
-    # files is complete and the top level trace file is included as well.
-    earliest = float('inf')
-    for trace_walk in tracefiles.walk():
-        directory, _, files = trace_walk
-        for f in files:
-            tracefile = directory / f
-            try:
-                with open(tracefile, encoding='utf-8', mode='r') as candidate:
-                    for line in candidate:
-                        try:
-                            timestamp = float(line.split()[0])
-                        except ValueError:
-                            print(f"tracefile {tracefile} does not seem to contain a valid timestamp, exiting",
-                                  file=sys.stderr)
-                            sys.exit(1)
-                        if timestamp < earliest:
-                            rootfile = tracefile
-                            earliest = timestamp
-                        break
-            except UnicodeDecodeError:
-                print(f"tracefile {tracefile} does not seem to contain a valid trace, exiting",
-                        file=sys.stderr)
-                sys.exit(1)
-
-    default_pid = rootfile.suffix[1:]
-
-    # set the parent to an empty value, as there
-    # is no parent for the first process.
-    parent = None
-
-    if debug:
-        print("ROOT PID", default_pid, file=sys.stderr)
 
     # set the first "current working directory"
     cwd = ''
@@ -138,9 +98,275 @@ def process_trace(basepath, buildid, tracefiles, output_directory, debug):
     # set the first "command"
     command = None
 
-    # Process the first tracefile. This will process the other
-    # dependent trace files recursively.
-    single_tracefile(rootfile, default_pid, parent, cwd, command, output_directory, debug)
+    # set the root PID
+    default_pid = None
+
+    # store the known pids
+    known_pids = set()
+
+    # store mappings for pids to parents and parents to pids
+    parent_to_pid = {}
+    pid_to_parent = {}
+
+    # store trace processes per PID
+    trace_processes = {}
+
+    # some temporary storage for like flags for some unfinished
+    # system calls (clone, clone3, etc.) stored per pid
+    temp_data = {}
+
+    # open the tracefile and process each line
+    for line in tracefile:
+        if not default_pid:
+            default_pid = int(line.split('<', maxsplit=1)[0])
+            pid_to_parent[default_pid] = None
+            if debug:
+                print("ROOT PID", default_pid, file=sys.stderr)
+            trace_processes[default_pid] = tracer.TraceProcess(default_pid, None)
+            known_pids.add(default_pid)
+
+        # process each line. Extract pid and timestamp first,
+        # then extract the syscall using regex
+        pid_command, rest_of_line = line.strip().split(' ', maxsplit=1)
+        pid = int(pid_command.split('<', maxsplit=1)[0])
+        cur_command = pid_command.split('<', maxsplit=1)[1][:-1]
+
+        # unfinished/resumed system calls should be processed separately
+        is_unfinished = False
+        is_resumed = False
+
+        # grab the name of the system call.
+        if '<... ' in rest_of_line and ' resumed>' in rest_of_line:
+            syscall_result = syscalls.syscall_resumed_re.match(rest_of_line)
+            if not syscall_result:
+                continue
+            is_resumed = True
+        else:
+            syscall_result = syscalls.syscall_re.match(rest_of_line)
+            if not syscall_result:
+                continue
+
+        syscall = syscall_result.group('syscall')
+
+        # skip uninteresting system calls
+        if syscall in IGNORE_SYSCALLS:
+            continue
+
+        if rest_of_line.endswith('<unfinished ...>'):
+            is_unfinished = True
+
+        if syscall in ['clone', 'clone3', 'vfork']:
+            # Check to see if a new process was created.
+            # In certain instances (such as vfork and clone3) the
+            # system call could be in an "unfinished" state
+            if syscall == 'clone':
+                if is_unfinished:
+                    # There are some possibly interesting flags that can be
+                    # extracted, so store them.
+                    continue
+                elif is_resumed:
+                    cloneres = syscalls.clone_resumed_re.search(line)
+                else:
+                    cloneres = syscalls.clone_re.search(line)
+            elif syscall == 'clone3':
+                if is_unfinished:
+                    # There are some possibly interesting flags that can be
+                    # extracted, so store them.
+                    continue
+                elif is_resumed:
+                    cloneres = syscalls.clone3_resumed_re.search(line)
+                else:
+                    cloneres = syscalls.clone3_re.search(line)
+            elif syscall == 'vfork':
+                if is_unfinished:
+                    # There actually isn't any information to
+                    # record, as it will look like this:
+                    #
+                    # vfork( <unfinished ...>
+                    continue
+                elif is_resumed:
+                    cloneres = syscalls.vfork_resumed_re.search(line)
+                else:
+                    cloneres = syscalls.vfork_re.search(line)
+            if not cloneres:
+                if debug:
+                    print('clone/clone3/vfork failed:', line, file=sys.stderr)
+                continue
+
+            # extract the PID of the cloned process
+            clone_pid = int(cloneres.group('clone_pid'))
+
+            # store the clone pid in the various PID mappings
+            pid_to_parent[clone_pid] = pid
+            if pid not in parent_to_pid:
+                parent_to_pid[pid] = []
+            parent_to_pid[pid].append(clone_pid)
+
+            # create a new TraceProcess if it wasn't already created
+            if clone_pid not in trace_processes:
+                new_trace_process = tracer.TraceProcess(clone_pid, pid)
+
+                # explicitly set the working directory to the current working
+                # directory of the parent process
+                new_trace_process.cwd = trace_processes[pid].cwd
+
+                # store the trace process
+                trace_processes[clone_pid] = new_trace_process
+
+                # add clone_pid to the set of known pids
+                known_pids.add(clone_pid)
+            else:
+                # set the cwd for the process to the parent's cwd if none
+                # has been set by chdir/fchdir/getcwd
+                if not trace_processes[clone_pid].cwd:
+                    trace_processes[clone_pid].cwd = trace_processes[pid].cwd
+                if not trace_processes[clone_pid].parent_pid:
+                    trace_processes[clone_pid].parent_pid = pid
+        elif syscall in ['chdir', 'fchdir']:
+            if is_unfinished:
+                chdir_res = syscalls.chdir_unfinished_re.search(rest_of_line)
+                if chdir_res:
+                    # store the temporary data in temp_data
+                    chdir_path = pathlib.Path(chdir_res.group('path'))
+                    if not pid in temp_data:
+                        temp_data[pid] = {}
+                    temp_data[pid][syscall] = {'chdir_path': chdir_path}
+                continue
+            if not rest_of_line.rsplit('=', maxsplit=1)[1].strip().startswith('0'):
+                continue
+            if syscall == 'chdir':
+                chdir_res = syscalls.chdir_re.search(line)
+            elif syscall == 'fchdir':
+                chdir_res = syscalls.fchdir_re.search(line)
+            if chdir_res:
+                chdir_path = pathlib.Path(chdir_res.group('path'))
+                if chdir_path == '.':
+                    continue
+
+                # absolute paths can be stored immediately
+                # while relative paths need to be rewritten
+                # first (TODO)
+                if chdir_path.is_absolute():
+                    cwd = chdir_path
+                else:
+                    cwd = pathlib.Path(os.path.normpath(cwd / chdir_path))
+                if pid in trace_processes:
+                     trace_processes[pid].cwd = cwd
+                else:
+                     # TODO: what to do here?
+                     pass
+            elif debug:
+                print('chdir/fchdir failed:', line, file=sys.stderr)
+        elif syscall == 'getcwd':
+            getcwd_result = syscalls.getcwd_re.search(line)
+            if getcwd_result:
+                cwd = pathlib.Path(os.path.normpath(getcwd_result.group('cwd')))
+                if pid in trace_processes:
+                     trace_processes[pid].cwd = cwd
+                else:
+                     # TODO: what to do here?
+                     pass
+            elif debug:
+                print('getcwd failed:', line, file=sys.stderr)
+        elif syscall == 'getpid':
+            # create a placeholder for commands. This value is typically
+            # overwritten when parsing execve
+            getpid_results = syscalls.getpid_re.search(line)
+            if getpid_results:
+                command = {'command': getpid_results.groups()[0], 'args': None}
+                trace_processes[pid].command = command
+            elif debug:
+                print('getpid failed:', line, file=sys.stderr)
+        elif syscall in ['openat']:
+            if is_unfinished:
+                openres = syscalls.openat_unfinished_re.search(rest_of_line)
+                if openres:
+                    # store the temporary data in temp_data
+                    orig_path = pathlib.Path(openres.group('cwd')) / openres.group('path')
+                    cwd = pathlib.Path(openres.group('cwd'))
+                    flags = openres.group('flags').split('|')
+                    if not pid in temp_data:
+                        temp_data[pid] = {}
+                    temp_data[pid][syscall] = {'orig_path': orig_path, 'flags': flags, 'cwd': cwd}
+                    continue
+            if rest_of_line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                continue
+            if is_resumed:
+                openres = syscalls.openat_resumed_re.search(rest_of_line)
+                if openres:
+                    # extract the remaining data and remove the temporary data
+                    resolved_path = pathlib.Path(openres.group('resolved_path'))
+                    fd = openres.group('result_fd')
+                    orig_path = temp_data[pid][syscall]['orig_path']
+                    flags = temp_data[pid][syscall]['flags']
+                    cwd = temp_data[pid][syscall]['cwd']
+                    del temp_data[pid][syscall]
+            else:
+                openres = syscalls.openat_re.search(rest_of_line)
+                if openres:
+                    # Store both the (resolved) original path and the fully resolved
+                    # path (related to symbolic links) for the process.
+                    # This include all files that are opened, including in
+                    # places such as /dev and /proc which are defined in IGNORE_DIRECTORIES.
+                    orig_path = pathlib.Path(openres.group('cwd')) / openres.group('path')
+                    resolved_path = pathlib.Path(openres.group('resolved_path'))
+                    cwd = pathlib.Path(openres.group('cwd'))
+                    flags = openres.group('flags').split('|')
+                    fd = openres.group('result_fd')
+
+            if openres:
+                if debug:
+                    print(f"PROCESS {pid} OPENED {resolved_path}",
+                          file=sys.stderr)
+
+                # check to see if the file was already opened before by this process
+                already_opened = trace_processes[pid].is_opened(orig_path)
+                if not already_opened:
+                    timestamp = float(rest_of_line.split(' ', maxsplit=1)[0])
+                    opened_file = tracer.OpenedFile(cwd, flags, orig_path, resolved_path, fd, timestamp)
+                    trace_processes[pid].add_opened_file(opened_file)
+                    trace_processes[pid].add_open_fd(fd, opened_file)
+                #trace_processes[pid].open_fds = list(open_fds.values())
+            elif debug:
+                print('openat failed:', line, file=sys.stderr)
+        elif syscall in ['write', 'pwrite64']:
+            if syscall == 'write':
+                if is_resumed:
+                    continue
+                write_res = syscalls.write_re.search(line)
+            else:
+                write_res = syscalls.pwrite64_re.search(line)
+            if write_res:
+                # extra sanity check to see if data was written
+                try:
+                    num_bytes = int(line.strip().rsplit('=')[-1])
+                except:
+                    continue
+                # store the path of the file that was written to, except
+                # if it is a pipe
+                write_path = write_res.group('path')
+                if not write_path.startswith('pipe:['):
+                    trace_processes[pid].add_written_file(write_path)
+                else:
+                    # fd related to the pipe is an output
+                    pass
+            elif debug:
+                print('write/pwrite64 failed:', line, file=sys.stderr)
+
+
+        # Check if the pid is a known pid. There are situations where this
+        # can happen:
+        #
+        # 1. a system call creating the process was interrupted (example: clone3) and later resumed
+        # 2. the trace file is corrupted
+        if pid not in known_pids:
+            new_trace_process = tracer.TraceProcess(pid, None)
+
+            # store the trace process
+            trace_processes[pid] = new_trace_process
+
+            # add clone_pid to the set of known pids
+            known_pids.add(pid)
 
     # Finally write meta results to JSON
     meta = {'buildid': buildid, 'root': default_pid, 'basepath': str(basepath), 'output': 'pickle'}
