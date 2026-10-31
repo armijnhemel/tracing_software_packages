@@ -319,6 +319,9 @@ class TraceProcess:
     def open_fds(self, open_fds):
         self._open_fds = open_fds
 
+    def add_open_fd(self, fd, opened_file):
+        self._open_fds[fd] = opened_file
+
     def is_opened(self, pathname):
         '''Check if a file has already been opened'''
         names = set(map(lambda x: x.original_path, self._opened_files)) | set(map(lambda x: x.resolved_path, self._opened_files))
