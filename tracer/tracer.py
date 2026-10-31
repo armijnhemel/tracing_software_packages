@@ -207,7 +207,7 @@ class TraceProcess:
         # Mapping of pipes to file descriptors (read/write)
         self._pipe_to_fds = {}
 
-        self.open_fds = {}
+        self._open_fds = {}
 
     @property
     def parent_pid(self):
