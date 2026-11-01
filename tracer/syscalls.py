@@ -26,6 +26,7 @@ openat_unfinished_re = re.compile(r"openat\((?P<open_fd>\w+)<(?P<cwd>.*)>, \"(?P
 
 # close
 close_re = re.compile(r"close\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>\)\s+=\s+(?P<returncode>\d+)")
+close_unfinished_re = re.compile(r"close\((?P<fd>\d+)<(?P<path>[\w\d:+/_\-\.\[\]]+)>\s+<unfinished \.\.\.>$")
 
 # getcwd
 getcwd_re = re.compile(r"getcwd\(\"(?P<cwd>[\w/\-+,.]+)\",\s+\d+\)\s+=\s+(?P<fd>\-?\d+)")
