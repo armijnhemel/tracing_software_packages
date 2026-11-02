@@ -283,6 +283,10 @@ class TraceProcess:
     def statted_files(self, statted_files):
         self._statted_files = statted_files
 
+    def add_statted_file(self, statted_file):
+        self._statted_files.append(statted_file)
+        self._statted_files = list(set(self._statted_files))
+
     @property
     def written_files(self):
         return self._written_files
