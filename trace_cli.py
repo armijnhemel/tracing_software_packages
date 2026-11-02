@@ -99,7 +99,7 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
     command = None
 
     # set the root PID
-    default_pid = None
+    root_pid = None
 
     # store the known pids
     known_pids = set()
@@ -117,13 +117,13 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
 
     # open the tracefile and process each line
     for line in tracefile:
-        if not default_pid:
-            default_pid = int(line.split('<', maxsplit=1)[0])
-            pid_to_parent[default_pid] = None
+        if not root_pid:
+            root_pid = int(line.split('<', maxsplit=1)[0])
+            pid_to_parent[root_pid] = None
             if debug:
-                print("ROOT PID", default_pid, file=sys.stderr)
-            trace_processes[default_pid] = tracer.TraceProcess(default_pid, None)
-            known_pids.add(default_pid)
+                print("ROOT PID", root_pid, file=sys.stderr)
+            trace_processes[root_pid] = tracer.TraceProcess(root_pid, None)
+            known_pids.add(root_pid)
 
         # process each line. Extract pid and timestamp first,
         # then extract the syscall using regex
@@ -152,6 +152,20 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
         if syscall in IGNORE_SYSCALLS:
             continue
 
+        # Check if the pid is a known pid. There are situations where this
+        # can happen:
+        #
+        # 1. a system call creating the process was interrupted (example: clone3) and later resumed
+        # 2. the trace file is corrupted
+        if pid not in known_pids:
+            new_trace_process = tracer.TraceProcess(pid, None)
+
+            # store the trace process
+            trace_processes[pid] = new_trace_process
+
+            # add clone_pid to the set of known pids
+            known_pids.add(pid)
+
         if rest_of_line.endswith('<unfinished ...>'):
             is_unfinished = True
 
@@ -164,7 +178,7 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                     # There are some possibly interesting flags that can be
                     # extracted, so store them.
                     continue
-                elif is_resumed:
+                if is_resumed:
                     cloneres = syscalls.clone_resumed_re.search(line)
                 else:
                     cloneres = syscalls.clone_re.search(line)
@@ -173,7 +187,7 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                     # There are some possibly interesting flags that can be
                     # extracted, so store them.
                     continue
-                elif is_resumed:
+                if is_resumed:
                     cloneres = syscalls.clone3_resumed_re.search(line)
                 else:
                     cloneres = syscalls.clone3_re.search(line)
@@ -184,7 +198,7 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                     #
                     # vfork( <unfinished ...>
                     continue
-                elif is_resumed:
+                if is_resumed:
                     cloneres = syscalls.vfork_resumed_re.search(line)
                 else:
                     cloneres = syscalls.vfork_re.search(line)
@@ -210,6 +224,10 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                 # directory of the parent process
                 new_trace_process.cwd = trace_processes[pid].cwd
 
+                # copy all the parents' open file descriptors
+                for fd in trace_processes[pid].open_fds:
+                    new_trace_process.add_open_fd(fd, copy.copy(trace_processes[pid].open_fds[fd]))
+
                 # store the trace process
                 trace_processes[clone_pid] = new_trace_process
 
@@ -222,13 +240,27 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                     trace_processes[clone_pid].cwd = trace_processes[pid].cwd
                 if not trace_processes[clone_pid].parent_pid:
                     trace_processes[clone_pid].parent_pid = pid
+
+                # copy all the parents' open file descriptors
+                for fd in trace_processes[pid].open_fds:
+                    trace_processes[clone_pid].add_open_fd(fd, copy.copy(trace_processes[pid].open_fds[fd]))
+
+                # close all the file descriptors that should be closed
+                if clone_pid in temp_data:
+                    if 'close' in temp_data[clone_pid]:
+                        while True:
+                            try:
+                                fd = temp_data[clone_pid]['close'].pop()
+                                trace_processes[clone_pid].remove_fd(fd)
+                            except IndexError:
+                                break
         elif syscall in ['chdir', 'fchdir']:
             if is_unfinished:
                 chdir_res = syscalls.chdir_unfinished_re.search(rest_of_line)
                 if chdir_res:
                     # store the temporary data in temp_data
                     chdir_path = pathlib.Path(chdir_res.group('path'))
-                    if not pid in temp_data:
+                    if pid not in temp_data:
                         temp_data[pid] = {}
                     temp_data[pid][syscall] = {'chdir_path': chdir_path}
                 continue
@@ -251,10 +283,10 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                 else:
                     cwd = pathlib.Path(os.path.normpath(cwd / chdir_path))
                 if pid in trace_processes:
-                     trace_processes[pid].cwd = cwd
+                    trace_processes[pid].cwd = cwd
                 else:
-                     # TODO: what to do here?
-                     pass
+                    # TODO: what to do here?
+                    pass
             elif debug:
                 print('chdir/fchdir failed:', line, file=sys.stderr)
         elif syscall == 'getcwd':
@@ -262,10 +294,10 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
             if getcwd_result:
                 cwd = pathlib.Path(os.path.normpath(getcwd_result.group('cwd')))
                 if pid in trace_processes:
-                     trace_processes[pid].cwd = cwd
+                    trace_processes[pid].cwd = cwd
                 else:
-                     # TODO: what to do here?
-                     pass
+                    # TODO: what to do here?
+                    pass
             elif debug:
                 print('getcwd failed:', line, file=sys.stderr)
         elif syscall == 'getpid':
@@ -276,7 +308,7 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                 command = {'command': getpid_results.groups()[0], 'args': None}
                 trace_processes[pid].command = command
             elif debug:
-                print('getpid failed:', line, file=sys.stderr)
+                print('getpid failed:', line.strip(), file=sys.stderr)
         elif syscall in ['openat']:
             if is_unfinished:
                 openres = syscalls.openat_unfinished_re.search(rest_of_line)
@@ -285,7 +317,7 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                     orig_path = pathlib.Path(openres.group('cwd')) / openres.group('path')
                     cwd = pathlib.Path(openres.group('cwd'))
                     flags = openres.group('flags').split('|')
-                    if not pid in temp_data:
+                    if pid not in temp_data:
                         temp_data[pid] = {}
                     temp_data[pid][syscall] = {'orig_path': orig_path, 'flags': flags, 'cwd': cwd}
                     continue
@@ -296,7 +328,7 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                 if openres:
                     # extract the remaining data and remove the temporary data
                     resolved_path = pathlib.Path(openres.group('resolved_path'))
-                    fd = openres.group('result_fd')
+                    fd = int(openres.group('result_fd'))
                     orig_path = temp_data[pid][syscall]['orig_path']
                     flags = temp_data[pid][syscall]['flags']
                     cwd = temp_data[pid][syscall]['cwd']
@@ -312,7 +344,7 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                     resolved_path = pathlib.Path(openres.group('resolved_path'))
                     cwd = pathlib.Path(openres.group('cwd'))
                     flags = openres.group('flags').split('|')
-                    fd = openres.group('result_fd')
+                    fd = int(openres.group('result_fd'))
 
             if openres:
                 if debug:
@@ -326,9 +358,107 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                     opened_file = tracer.OpenedFile(cwd, flags, orig_path, resolved_path, fd, timestamp)
                     trace_processes[pid].add_opened_file(opened_file)
                     trace_processes[pid].add_open_fd(fd, opened_file)
+                    #print(trace_processes[pid].open_fds)
                 #trace_processes[pid].open_fds = list(open_fds.values())
             elif debug:
-                print('openat failed:', line, file=sys.stderr)
+                print('openat failed:', line.strip(), file=sys.stderr)
+        elif syscall == 'close':
+            # Process close() calls to close file descriptors. These calls
+            # are either successful (in which case the file descriptor is closed)
+            # or there is an error that the file descriptor is a bad file
+            # descriptor and there is no file descriptor with that number.
+            # Other error codes are actually irrelevant, as they relate to
+            # interrupted builds, NFS, I/O errors, etc.
+            #
+            # There is a case where file descriptors can be closed before
+            # they have been recorded in a process. An example (redacted for
+            # readability):
+            #
+            # 13788<gcc> 1793197494.246146 vfork( <unfinished ...>
+            # 13789<gcc> 1793197494.246494 close(3<pipe:[90683]>) = 0
+            # 13789<gcc> 1793197494.246825 execve("/usr/libexec/gcc/x86_64-redhat-linux/13/cc1", [...], 0x1b0feed0 /* 77 vars */ <unfinished ...>
+            # 13788<gcc> 1793197494.247203 <... vfork resumed>) = 13789<cc1>
+            #
+            # Here the file descriptor 3 (pipe:[90683]) is closed before it
+            # has been recorded as an open file descriptor, because the parent
+            # process (from which open file descriptors are inherited) isn't
+            # known yet. This means that if the parent process isn't known,
+            # then the file descriptor should be removed immediately after
+            # the file descriptors from the parent have been copied, so any
+            # file descriptors that should be closed as soon as the parent
+            # process is known should be stored, except in the top level
+            # process.
+            if '=' in rest_of_line and rest_of_line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                # ignore -1 EBADF (Bad file descriptor)
+                continue
+            if is_resumed:
+                # ignore resumed calls
+                continue
+
+            # process unfinished and regular calls to close()
+            if is_unfinished:
+                close_res = syscalls.close_unfinished_re.search(rest_of_line)
+            else:
+                close_res = syscalls.close_re.search(rest_of_line)
+            if not close_res:
+                if debug:
+                    print('close failed:', line.strip(), file=sys.stderr)
+                continue
+            #closed.add(close_res.group('path'))
+            fd = int(close_res.group('fd'))
+            if pid == root_pid or trace_processes[pid].parent_pid:
+                trace_processes[pid].remove_fd(fd)
+            else:
+                # store file descriptors that should be closed
+                # immediately as soon as the parent's file descriptors
+                # are copied to the new process.
+                if pid not in temp_data:
+                    temp_data[pid] = {}
+                if 'close' not in temp_data[pid]:
+                    temp_data[pid]['close'] = []
+                temp_data[pid]['close'].append(fd)
+        elif syscall == 'newfstatat':
+            if is_unfinished:
+                newfstatat_res = syscalls.newfstatat_unfinished_re.search(rest_of_line)
+                if not newfstatat_res:
+                    if debug:
+                        print('newfstatat failed:', line, file=sys.stderr)
+                    continue
+                orig_path = pathlib.Path(newfstatat_res.group('cwd')) / newfstatat_res.group('path')
+                fd = newfstatat_res.group('open_fd')
+
+                timestamp = float(rest_of_line.split(' ', maxsplit=1)[0])
+                stat_file = tracer.StatFile(pathlib.Path(newfstatat_res.group('cwd')), orig_path, fd, timestamp)
+                if pid not in temp_data:
+                    temp_data[pid] = {}
+                if 'newfstatat' not in temp_data[pid]:
+                    temp_data[pid]['newfstatat'] = stat_file
+                continue
+            if is_resumed:
+                # grab the statted file
+                if pid not in temp_data:
+                    continue
+                if 'newfstatat' not in temp_data[pid]:
+                    continue
+                statfile = temp_data[pid].pop('newfstatat')
+                if rest_of_line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                    continue
+                trace_processes[pid].add_statted_file(stat_file)
+                continue
+            if rest_of_line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                continue
+
+            # process regular lines
+            newfstatat_res = syscalls.newfstatat_re.search(rest_of_line)
+            if newfstatat_res:
+                orig_path = pathlib.Path(newfstatat_res.group('cwd')) / newfstatat_res.group('path')
+                fd = newfstatat_res.group('open_fd')
+
+                timestamp = float(rest_of_line.split(' ', maxsplit=1)[0])
+                stat_file = tracer.StatFile(pathlib.Path(newfstatat_res.group('cwd')), orig_path, fd, timestamp)
+                trace_processes[pid].add_statted_file(stat_file)
+            elif debug:
+                print('newfstatat failed:', line, file=sys.stderr)
         elif syscall in ['write', 'pwrite64']:
             if syscall == 'write':
                 if is_resumed:
@@ -354,22 +484,8 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                 print('write/pwrite64 failed:', line, file=sys.stderr)
 
 
-        # Check if the pid is a known pid. There are situations where this
-        # can happen:
-        #
-        # 1. a system call creating the process was interrupted (example: clone3) and later resumed
-        # 2. the trace file is corrupted
-        if pid not in known_pids:
-            new_trace_process = tracer.TraceProcess(pid, None)
-
-            # store the trace process
-            trace_processes[pid] = new_trace_process
-
-            # add clone_pid to the set of known pids
-            known_pids.add(pid)
-
     # Finally write meta results to JSON
-    meta = {'buildid': buildid, 'root': default_pid, 'basepath': str(basepath), 'output': 'pickle'}
+    meta = {'buildid': buildid, 'root': root_pid, 'basepath': str(basepath), 'output': 'pickle'}
 
     with open(output_directory / "meta.json", encoding='utf-8', mode='w') as outfile:
         json.dump(meta, outfile, indent=4)
