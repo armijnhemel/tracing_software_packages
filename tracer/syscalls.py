@@ -70,6 +70,7 @@ pipe2_re = re.compile(r"pipe2\(\[(?P<read_fd>\d+)<pipe:\[(?P<read_pipe>\d+)\]>,\
 
 # stat, statx, newfstatat
 newfstatat_re = re.compile(r"newfstatat\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<path>[\w\d\s\./\-+]*)\",\s+{")
+newfstatat_unfinished_re = re.compile(r"newfstatat\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<path>[\w\d\s\./\-+]*)\",\s+<unfinished \.\.\.>$")
 #statx = re.compile(r"statx\(")
 
 # write (partial)
