@@ -181,6 +181,9 @@ class TraceProcess:
         # These are OpenedFile objects.
         self._opened_files = []
 
+        # Files that were closed by this process (entire lifetime)
+        self._closed_files = []
+
         # Files that were renamed by this process (entire lifetime)
         self._renamed_files = []
 
