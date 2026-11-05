@@ -252,6 +252,17 @@ class TraceProcess:
         self._cwd = cwd
 
     @property
+    def closed_files(self):
+        return self._closed_files
+
+    @closed_files.setter
+    def closed_files(self, closed_files):
+        self._closed_files = closed_files
+
+    def add_closed_file(self, closed_file):
+        self._closed_files.append(closed_file)
+
+    @property
     def opened_files(self):
         return self._opened_files
 
