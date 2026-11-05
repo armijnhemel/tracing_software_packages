@@ -92,11 +92,8 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
     except Exception as e:
         raise click.ClickException(f"Could not create {output_directory}") from e
 
-    # set the first "current working directory"
+    # set the initial "current working directory"
     cwd = ''
-
-    # set the first "command"
-    command = None
 
     # set the root PID
     root_pid = None
@@ -404,9 +401,14 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                 if debug:
                     print('close failed:', line.strip(), file=sys.stderr)
                 continue
-            #closed.add(close_res.group('path'))
+
+            trace_processes[pid].add_closed_file(close_res.group('path'))
             fd = int(close_res.group('fd'))
+
             if pid == root_pid or trace_processes[pid].parent_pid:
+                # remove fds for processes for which there is a known
+                # parent, or if the process is the root process (for which
+                # there is no root process)
                 trace_processes[pid].remove_fd(fd)
             else:
                 # store file descriptors that should be closed
