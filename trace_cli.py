@@ -419,6 +419,29 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                 if 'close' not in temp_data[pid]:
                     temp_data[pid]['close'] = []
                 temp_data[pid]['close'].append(fd)
+        elif syscall == 'pipe2':
+            # Extract file descriptor numbers and pipe number
+            # man 7 pipe
+            if is_unfinished:
+                continue
+            if is_resumed:
+                pipe_res = syscalls.pipe2_resumed_re.search(line)
+            else:
+                pipe_res = syscalls.pipe2_re.search(line)
+            if not pipe_res:
+                if debug:
+                    print('pipe2 failed:', line, file=sys.stderr)
+                continue
+
+            # each pipe has a read and write file descriptor associated with it
+            read_fd = pipe_res.group('read_fd')
+            write_fd = pipe_res.group('write_fd')
+
+            # in the strace output there are two values for the pipe
+            # namely the read end and the write end. These are always
+            # identical, but extracted for completeness sake.
+            read_pipe = pipe_res.group('read_pipe')
+            write_pipe = pipe_res.group('write_pipe')
         elif syscall == 'newfstatat':
             if is_unfinished:
                 newfstatat_res = syscalls.newfstatat_unfinished_re.search(rest_of_line)
@@ -484,6 +507,31 @@ def process_trace(basepath, buildid, tracefile, output_directory, debug, force):
                     pass
             elif debug:
                 print('write/pwrite64 failed:', line, file=sys.stderr)
+        elif syscall in ['rename', 'renameat2']:
+            # renaming is important to track.
+            # Example: in the Linux kernel the file include/config/auto.conf
+            # is "created" by renaming an already existing file.
+            if line.rsplit('=', maxsplit=1)[1].strip().startswith('-1'):
+                continue
+            if syscall == 'rename':
+                rename_res = syscalls.rename_re.search(rest_of_line)
+            else:
+                rename_res = syscalls.renameat2_re.search(rest_of_line)
+            if rename_res:
+                timestamp = float(rest_of_line.split(' ', maxsplit=1)[0])
+                if syscall == 'rename':
+                    original_name = pathlib.Path(rename_res.group('original'))
+                    original_cwd = cwd
+                    renamed_name = pathlib.Path(rename_res.group('renamed'))
+                    renamed_cwd = cwd
+                elif syscall == 'renameat2':
+                    original_name = pathlib.Path(rename_res.group('original'))
+                    original_cwd = pathlib.Path(rename_res.group('cwd'))
+                    renamed_name = pathlib.Path(rename_res.group('renamed'))
+                    renamed_cwd = pathlib.Path(rename_res.group('cwd2'))
+                renamed_file = tracer.RenamedFile(timestamp, original_name, original_cwd,
+                                                  renamed_name, renamed_cwd)
+                trace_processes[pid].add_renamed_file(renamed_file)
 
 
     # Finally write meta results to JSON
