@@ -67,6 +67,9 @@ dup2_re = re.compile(r"dup2\((?P<old_fd>\d+)<(?P<old_fd_resolved>[\d\w/\-+_\.:\[
 # pipe2
 # Example: pipe2([3<pipe:[1714585]>, 4<pipe:[1714585]>], O_CLOEXEC) = 0
 pipe2_re = re.compile(r"pipe2\(\[(?P<read_fd>\d+)<pipe:\[(?P<read_pipe>\d+)\]>,\s+(?P<write_fd>\d+)<pipe:\[(?P<write_pipe>\d+)\]>\],\s+[\w\d]+\)\s+=\s+(?P<returncode>\d+)")
+# Example: <... pipe2 resumed>[4<pipe:[108257]>, 5<pipe:[108257]>], 0) = 0
+pipe2_resumed_re = re.compile(r"<\.\.\.\s+pipe2\s+resumed>\[(?P<read_fd>\d+)<pipe:\[(?P<read_pipe>\d+)\]>,\s+(?P<write_fd>\d+)<pipe:\[(?P<write_pipe>\d+)\]>\],\s+[\w\d]+\)\s+=\s+(?P<returncode>\d+)")
+
 
 # stat, statx, newfstatat
 newfstatat_re = re.compile(r"newfstatat\((?P<open_fd>\w+)<(?P<cwd>[\w\d\s:+/_\-\.,\s]+)>,\s+\"(?P<path>[\w\d\s\./\-+]*)\",\s+{")
