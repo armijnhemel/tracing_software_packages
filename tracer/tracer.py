@@ -289,6 +289,10 @@ class TraceProcess:
     def renamed_files(self, renamed_files):
         self._renamed_files = renamed_files
 
+    def add_renamed_file(self, renamed_file):
+        self._renamed_files.append(renamed_file)
+        self._renamed_files = list(set(self._renamed_files))
+
     @property
     def statted_files(self):
         return self._statted_files
